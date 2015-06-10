@@ -397,6 +397,9 @@ static int lvl_divider_map_2[] = {10,1,1,1,1,14,12    ,1,1};
 static int lvl_multiplicator_map_3[] = {10,1,1,1,1,11,9    ,1,1};
 static int lvl_divider_map_3[] = {10,1,1,1,1,15,13    ,1,1};
 
+#ifdef CONFIG_ADRENO_IDLER
+extern int adreno_idler(struct devfreq_dev_status stats, struct devfreq *devfreq,
+		 unsigned long *freq);
 #endif
 
 static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
@@ -418,7 +421,21 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
 		return result;
 	}
 
+	/* Prevent overflow */
+	if (stats.busy_time >= (1 << 24) || stats.total_time >= (1 << 24)) {
+		stats.busy_time >>= 7;
+		stats.total_time >>= 7;
+	}
+
 	*freq = stats.current_frequency;
+
+#ifdef CONFIG_ADRENO_IDLER
+	if (adreno_idler(stats, devfreq, freq)) {
+		/* adreno_idler has asked to bail out now */
+		return 0;
+	}
+#endif
+
 	priv->bin.total_time += stats.total_time;
 #if 1
 	// scale busy time up based on adrenoboost parameter, only if MIN_BUSY exceeded...
