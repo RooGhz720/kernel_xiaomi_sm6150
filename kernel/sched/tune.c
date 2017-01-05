@@ -109,7 +109,13 @@ static struct schedtune root_schedtune = {
  *    implementation especially for the computation of the per-CPU boost
  *    value
  */
+#ifdef CONFIG_ANDROID_KERNEL
 #define BOOSTGROUPS_COUNT 8
+#endif
+
+#ifdef CONFIG_HALIUM_KERNEL
+#define BOOSTGROUPS_COUNT 16
+#endif
 
 /* Array of configured boostgroups */
 static struct schedtune *allocated_group[BOOSTGROUPS_COUNT] = {
@@ -751,11 +757,13 @@ schedtune_css_alloc(struct cgroup_subsys_state *parent_css)
 	if (!parent_css)
 		return &root_schedtune.css;
 
+#ifdef CONFIG_ANDROID_KERNEL
 	/* Allow only single level hierachies */
 	if (parent_css != &root_schedtune.css) {
 		pr_err("Nested SchedTune boosting groups not allowed\n");
 		return ERR_PTR(-ENOMEM);
 	}
+#endif
 
 	/* Allow only a limited number of boosting groups */
 	for (idx = 1; idx < BOOSTGROUPS_COUNT; ++idx)
