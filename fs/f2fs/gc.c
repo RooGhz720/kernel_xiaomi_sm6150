@@ -204,8 +204,6 @@ int f2fs_start_gc_thread(struct f2fs_sb_info *sbi)
 	}
 	set_task_ioprio(sbi->gc_thread->f2fs_gc_task,
 			IOPRIO_PRIO_VALUE(IOPRIO_CLASS_IDLE, 0));
-
-	sched_setscheduler(sbi->gc_thread->f2fs_gc_task, SCHED_IDLE, &param);
 out:
 	return err;
 }
