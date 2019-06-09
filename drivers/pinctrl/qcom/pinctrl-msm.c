@@ -662,6 +662,10 @@ static void msm_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 			if (i < 4 || (i > 5 && i < 10))
 				continue;
 		}
+
+		/* gpio 0~3 is NFC spi, gpio 126~129 is FP spi */
+		if (i < 4 || (i > 125 && i < 130))
+			continue;
 		msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
 		seq_puts(s, "\n");
 	}
