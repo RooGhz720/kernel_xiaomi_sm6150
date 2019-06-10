@@ -225,3 +225,8 @@ config KLAPSE
     default n
     help
         A simple rgb dynamic lapsing module similar to LineageOS' livedisplay
+
+config FENCE_DEBUG
+	bool "Print fence name to userspace"
+	depends on DRM_MSM
+	default n
