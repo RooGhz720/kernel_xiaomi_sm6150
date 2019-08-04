@@ -1682,3 +1682,5 @@ config ANDROID_KERNEL
 
           If unsure, say Y.
 endmenu
+
+source "techpack/Kconfig"
