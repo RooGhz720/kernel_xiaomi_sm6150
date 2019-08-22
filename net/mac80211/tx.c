@@ -817,7 +817,7 @@ ieee80211_tx_h_sequence(struct ieee80211_tx_data *tx)
 	 * This should be done using a radiotap flag.
 	 */
 	if (unlikely((info->flags & IEEE80211_TX_CTL_INJECTED) &&
-	   !(tx->sdata->u.mntr_flags & MONITOR_FLAG_COOK_FRAMES))) {
+	   !(tx->sdata->u.mntr.flags & MONITOR_FLAG_COOK_FRAMES))) {
 		if (!ieee80211_has_morefrags(hdr->frame_control))
 			info->flags |= IEEE80211_TX_CTL_NO_ACK;
 		return TX_CONTINUE;
@@ -1949,7 +1949,10 @@ void ieee80211_xmit(struct ieee80211_sub_if_data *sdata,
 		}
 	}
 
-	ieee80211_set_qos_hdr(sdata, skb);
+        // Don't overwrite QoS header in monitor mode
+        if (likely(info->control.vif->type != NL80211_IFTYPE_MONITOR)) {
+            ieee80211_set_qos_hdr(sdata, skb);
+        }
 	ieee80211_tx(sdata, sta, skb, false);
 }
 
