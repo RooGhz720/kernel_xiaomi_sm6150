@@ -171,14 +171,14 @@ int fdt_add_mem_rsv(void *fdt, uint64_t address, uint64_t size)
 
 int fdt_del_mem_rsv(void *fdt, int n)
 {
-	struct fdt_reserve_entry *re = fdt_mem_rsv_w_(fdt, n);
+	struct fdt_reserve_entry *re = _fdt_mem_rsv_w(fdt, n);
 
 	FDT_RW_PROBE(fdt);
 
 	if (n >= fdt_num_mem_rsv(fdt))
 		return -FDT_ERR_NOTFOUND;
 
-	return fdt_splice_mem_rsv_(fdt, re, 1, 0);
+	return _fdt_splice_mem_rsv(fdt, re, 1, 0);
 }
 
 static int fdt_resize_property_(void *fdt, int nodeoffset, const char *name,
@@ -284,7 +284,7 @@ int fdt_setprop(void *fdt, int nodeoffset, const char *name,
 		return err;
 
 	if (len)
-		memcpy(prop_data, val, len);
+		memcpy(prop->data, val, len);
 	return 0;
 }
 
