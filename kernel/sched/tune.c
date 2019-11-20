@@ -110,7 +110,7 @@ static struct schedtune root_schedtune = {
  *    value
  */
 #ifdef CONFIG_ANDROID_KERNEL
-#define BOOSTGROUPS_COUNT 8
+#define BOOSTGROUPS_COUNT 7
 #else
 #define BOOSTGROUPS_COUNT 16
 #endif
