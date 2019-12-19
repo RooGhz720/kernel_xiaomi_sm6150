@@ -5936,7 +5936,6 @@ static void fts_suspend_work(struct work_struct *work)
 	sysfs_notify(&fts_info->fts_touch_dev->kobj, NULL,
 			"touch_suspend_notify");
 #endif
-	MI_TOUCH_LOGI(1, "%s %s: suspend exit\n", VENDOR_TAG, __func__);
 }
 
 #ifdef CONFIG_DRM
