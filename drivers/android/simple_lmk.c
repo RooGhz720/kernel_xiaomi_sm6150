@@ -375,13 +375,14 @@ static int simple_lmk_init_set(const char *val, const struct kernel_param *kp)
 {
 	static atomic_t init_done = ATOMIC_INIT(0);
 	struct task_struct *thread;
+	struct sched_param param = { .sched_priority = 7 };
 
 	if (!atomic_cmpxchg(&init_done, 0, 1)) {
 		thread = kthread_run(simple_lmk_reclaim_thread, NULL,
 				     "simple_lmkd");
 		BUG_ON(IS_ERR(thread));
 		BUG_ON(vmpressure_notifier_register(&vmpressure_notif));
-		BUG_ON(msm_drm_register_client(&fb_notifier_block));
+		sched_setscheduler(thread, SCHED_FIFO, &param);
 	}
 
 	return 0;
