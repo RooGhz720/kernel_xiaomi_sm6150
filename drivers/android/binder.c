@@ -2871,10 +2871,10 @@ static bool binder_proc_transaction(struct binder_transaction *t,
 	if (oneway) {
 		BUG_ON(thread);
 		if (node->has_async_transaction) {
-                        #ifdef CONFIG_ANDROID_KERNEL
+#ifdef CONFIG_ANDROID_KERNEL
 			pending_async = true;
-                        #endif
-                        #ifdef CONFIG_HALIUM_KERNEL
+#endif
+#ifdef CONFIG_HALIUM_KERNEL
                         if (!strcmp(proc->context->name, "hwbinder")) {
 				// Halium: possible libgbinder bug workaround
 				pr_info("%d has pending async transaction, but still adding a new transaction to todo list (gbinder bug workaround)\n",
@@ -2884,7 +2884,7 @@ static bool binder_proc_transaction(struct binder_transaction *t,
 						proc->pid, proc->context->name);
 				pending_async = true;
 			}
-                        #endif
+#endif
 		} else {
 			node->has_async_transaction = true;
 		}
@@ -3213,9 +3213,9 @@ static void binder_transaction(struct binder_proc *proc,
 
 	if (target_node && target_node->txn_security_ctx) {
 		u32 secid;
-		#ifdef CONFIG_ANDROID_KERNEL
+#ifdef CONFIG_ANDROID_KERNEL
 		size_t added_size;
-                #endif
+#endif
 
 		security_task_getsecid(proc->tsk, &secid);
 		ret = security_secid_to_secctx(secid, &secctx, &secctx_sz);
@@ -3225,7 +3225,7 @@ static void binder_transaction(struct binder_proc *proc,
 			return_error_line = __LINE__;
 			goto err_get_secctx_failed;
 		}
-                #ifdef CONFIG_ANDROID_KERNEL
+#ifdef CONFIG_ANDROID_KERNEL
 		added_size = ALIGN(secctx_sz, sizeof(u64));
 		extra_buffers_size += added_size;
 		if (extra_buffers_size < added_size) {
@@ -3235,10 +3235,10 @@ static void binder_transaction(struct binder_proc *proc,
 			return_error_line = __LINE__;
 			goto err_bad_extra_size;
 		}
-                #endif
-                #ifdef CONFIG_HALIUM_KERNEL
+#endif
+#ifdef CONFIG_HALIUM_KERNEL
                 extra_buffers_size += ALIGN(secctx_sz, sizeof(u64));
-                #endif
+#endif
 	}
 
 	trace_binder_transaction(reply, t, target_node);
@@ -3851,13 +3851,13 @@ static int binder_thread_write(struct binder_proc *proc,
 
 				buf_node = buffer->target_node;
 				binder_node_inner_lock(buf_node);
-                                #ifdef CONFIG_ANDROID_KERNEL
+#ifdef CONFIG_ANDROID_KERNEL
 				BUG_ON(!buf_node->has_async_transaction);
-                                #endif
-                                #ifdef CONFIG_HALIUM_KERNEL
+#endif
+#ifdef CONFIG_HALIUM_KERNEL
                                 // Halium: possible libgbinder bug workaround
 				/*BUG_ON(!buf_node->has_async_transaction);*/
-                                #endif
+#endif
 				BUG_ON(buf_node->proc != proc);
 				w = binder_dequeue_work_head_ilocked(
 						&buf_node->async_todo);

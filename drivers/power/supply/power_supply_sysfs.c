@@ -45,7 +45,12 @@ static const char * const power_supply_type_text[] = {
 	"USB_DCP", "USB_CDP", "USB_ACA", "USB_C",
 	"USB_PD", "USB_PD_DRP", "BrickID",
 	"USB_HVDCP", "USB_HVDCP_3", "USB_HVDCP_3", "Wireless", "USB_FLOAT",
+#ifdef CONFIG_ANDROID_KERNEL
 	"BMS", "Parallel", "Main", "Wipower", "USB_C_UFP", "USB_C_DFP",
+#endif
+#ifdef CONFIG_HALIUM_KERNEL
+        "Mains", "Parallel", "Mains", "Wipower", "USB_C_UFP", "USB_C_DFP",
+#endif
 	"Charge_Pump",
 #ifdef CONFIG_BATT_VERIFY_BY_DS28E16
 	"Batt_Verify",
