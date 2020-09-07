@@ -67,6 +67,7 @@ obj-$(CONFIG_FPR_FPC) 	+= fpr_FingerprintCard/
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
 obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
+obj-$(CONFIG_BATTERY_SAVER)	+= battery_saver.o
 obj-$(CONFIG_TI_DRV8846) 	+= drv8846.o
 obj-$(CONFIG_SIMTRAY_STATUS)	+= simtray.o
 
