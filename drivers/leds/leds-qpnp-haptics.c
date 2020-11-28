@@ -359,6 +359,7 @@ struct hap_chip {
 	bool				lra_auto_mode;
 	bool				play_irq_en;
 	bool				auto_res_err_recovery_hw;
+	bool				vcc_pon_enabled;
 	int				vmax_override;
 	u32				vmax_mv_strong;
 	u32				vmax_mv_call;
@@ -1517,6 +1518,22 @@ static ssize_t qpnp_haptics_store_duration(struct device *dev,
 		}
 	}	
 
+	if (chip->vmax_override) {
+		old_vmax_mv = chip->vmax_mv;
+		if (val >= HAP_MIN_TIME_CALL)
+			chip->vmax_mv = chip->vmax_mv_call;
+		else if (val >= HAP_MIN_TIME_STRONG)
+			chip->vmax_mv = chip->vmax_mv_strong;
+		else
+			chip->vmax_mv = chip->vmax_mv_user;
+
+		rc = qpnp_haptics_vmax_config(chip, chip->vmax_mv, false);
+		if (rc < 0) {
+			chip->vmax_mv = old_vmax_mv;
+			return rc;
+		}
+	}
+
 	mutex_lock(&chip->param_lock);
 	rc = qpnp_haptics_auto_mode_config(chip, val);
 	if (rc < 0) {
@@ -1552,10 +1569,10 @@ static ssize_t qpnp_haptics_store_activate(struct device *dev,
 
 	if (val != 0 && val != 1)
 		return count;
-	
+
 	if (chip->vmax_mv <= HAP_VMAX_MIN_MV && (val != 0))
 		return count;
-	
+
 	if (val) {
 		hrtimer_cancel(&chip->stop_timer);
 		if (is_sw_lra_auto_resonance_control(chip))
@@ -1798,7 +1815,7 @@ static ssize_t qpnp_haptics_store_vmax(struct device *dev,
 
 	if (chip->vmax_override)
 		return count;
-	
+
 	old_vmax_mv = chip->vmax_mv;
 	chip->vmax_mv = data;
 	rc = qpnp_haptics_vmax_config(chip, chip->vmax_mv, false);
@@ -1806,6 +1823,34 @@ static ssize_t qpnp_haptics_store_vmax(struct device *dev,
 		chip->vmax_mv = old_vmax_mv;
 		return rc;
 	}
+
+	return count;
+}
+
+static ssize_t qpnp_haptics_show_vmax_override(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *cdev = dev_get_drvdata(dev);
+	struct hap_chip *chip = container_of(cdev, struct hap_chip, cdev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chip->vmax_override);
+}
+
+static ssize_t qpnp_haptics_store_vmax_override(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct led_classdev *cdev = dev_get_drvdata(dev);
+	struct hap_chip *chip = container_of(cdev, struct hap_chip, cdev);
+	int data, rc;
+
+	rc = kstrtoint(buf, 10, &data);
+	if (rc < 0)
+		return rc;
+
+	if (data != 0 && data != 1)
+		return count;
+
+	chip->vmax_override = !!data;
 
 	return count;
 }
@@ -2635,6 +2680,8 @@ static int qpnp_haptics_probe(struct platform_device *pdev)
 			goto sysfs_fail;
 		}
 	}
+	
+	gchip = chip;
 
 	gchip = chip;
 
