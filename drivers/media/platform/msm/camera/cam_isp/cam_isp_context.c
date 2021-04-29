@@ -3705,10 +3705,10 @@ static int __cam_isp_ctx_handle_irq_in_activated(void *context,
 	if (irq_ops->irq_ops[evt_id]) {
 		rc = irq_ops->irq_ops[evt_id](ctx_isp, evt_data);
 	} else {
-		CAM_DBG(CAM_ISP, "No handle function for substate %d",
-			ctx_isp->substate_activated);
+		CAM_INFO(CAM_ISP, "Ctx:%d No handle function for substate %d",
+			ctx->ctx_id, ctx_isp->substate_activated);
 		if (!IS_ENABLED(CONFIG_CAMERA_DISABLE_DUMP_STATE)) {
-			__cam_isp_ctx_dump_state_monitor_array(ctx_isp);
+			__cam_isp_ctx_dump_state_monitor_array(ctx_isp, true);
 		}
 	}
 
