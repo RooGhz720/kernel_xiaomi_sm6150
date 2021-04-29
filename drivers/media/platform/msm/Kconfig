@@ -37,6 +37,12 @@ menuconfig CAMERA_DISABLE_DUMP_STATE
     ---help---
       Say Y here to disable dump state monitor array
 
+menuconfig CAMERA_DISABLE_DUMP_STATE
+    bool "Qualcomm Technologies, Inc. Spectra camera and video capture disable dump state"
+    depends on ARCH_QCOM && VIDEO_V4L2 && I2C
+    ---help---
+      Say Y here to disable dump state monitor array
+
 menuconfig CSID_CAMERA
         bool "use CSID binning"
         default n
