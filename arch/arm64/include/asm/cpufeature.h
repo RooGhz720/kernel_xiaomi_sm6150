@@ -483,6 +483,12 @@ static inline bool system_uses_ttbr0_pan(void)
 		!cpus_have_const_cap(ARM64_HAS_PAN);
 }
 
+static inline bool system_has_hw_af(void)
+{
+	return IS_ENABLED(CONFIG_ARM64_HW_AFDBM) &&
+	       cpus_have_const_cap(ARM64_HW_AF);
+}
+
 static inline int arm64_get_ssbd_state(void)
 {
 #ifdef CONFIG_ARM64_SSBD
