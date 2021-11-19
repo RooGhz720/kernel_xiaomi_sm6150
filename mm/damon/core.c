@@ -12,6 +12,7 @@
 #include <linux/kthread.h>
 #include <linux/mm.h>
 #include <linux/random.h>
+#include <linux/sched/task.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 
