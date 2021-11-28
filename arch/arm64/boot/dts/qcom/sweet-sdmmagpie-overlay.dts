@@ -26,4 +26,5 @@
 	compatible = "qcom,sdmmagpie-qrd", "qcom,sdmmagpie", "qcom,qrd";
 	qcom,msm-id = <365 0x0>;
 	qcom,board-id = <46 0>;
+        overlay-id = "dora-xiaomi-redmi-note-10-pro";
 };
