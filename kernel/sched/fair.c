@@ -5377,7 +5377,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * utilization updates, so do it here explicitly with the IOWAIT flag
 	 * passed.
 	 */
-	if (p->in_iowait && prefer_idle)
+	if (p->in_iowait)
 		cpufreq_update_util(rq, SCHED_CPUFREQ_IOWAIT);
 
 	for_each_sched_entity(se) {
@@ -7047,13 +7047,11 @@ find_idlest_group_cpu(struct sched_group *group, struct task_struct *p, int this
 
 	/* Traverse only the allowed CPUs */
 	for_each_cpu_and(i, sched_group_span(group), &p->cpus_allowed) {
-		if (sched_idle_cpu(i))
-			return i;
-
 		if (idle_cpu(i)) {
 			struct rq *rq = cpu_rq(i);
 			struct cpuidle_state *idle = idle_get_state(rq);
 			if (idle && idle->exit_latency < min_exit_latency) {
+			
 				/*
 				 * We give priority to a CPU whose idle state
 				 * has the smallest exit latency irrespective
@@ -7301,7 +7299,7 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, int t
 			continue;
 		if (cpu_isolated(cpu))
 			continue;
-		if (idle_cpu(cpu) || sched_idle_cpu(cpu))
+		if (idle_cpu(cpu))
 			break;
 	}
 
@@ -8703,7 +8701,6 @@ static void task_dead_fair(struct task_struct *p)
 {
 	remove_entity_load_avg(&p->se);
 }
-#endif /* CONFIG_SMP */
 
 static unsigned long wakeup_gran(struct sched_entity *se)
 {
