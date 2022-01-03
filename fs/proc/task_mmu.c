@@ -1693,7 +1693,7 @@ const struct file_operations proc_pagemap_operations = {
 #endif /* CONFIG_PROC_PAGE_MONITOR */
 
 #ifdef CONFIG_PROCESS_RECLAIM
-int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
+static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 {
 	struct reclaim_param *rp = walk->private;
@@ -1770,12 +1770,15 @@ enum reclaim_type {
 	RECLAIM_RANGE,
 };
 
+static const struct mm_walk_ops reclaim_walk_ops = {
+	.pmd_entry = reclaim_pte_range,
+};
+
 struct reclaim_param reclaim_task_anon(struct task_struct *task,
 		int nr_to_reclaim)
 {
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
-	struct mm_walk reclaim_walk = {};
 	struct reclaim_param rp = {
 		.nr_to_reclaim = nr_to_reclaim,
 	};
@@ -1784,11 +1787,6 @@ struct reclaim_param reclaim_task_anon(struct task_struct *task,
 	mm = get_task_mm(task);
 	if (!mm)
 		goto out;
-
-	reclaim_walk.mm = mm;
-	reclaim_walk.pmd_entry = reclaim_pte_range;
-
-	reclaim_walk.private = &rp;
 
 	down_read(&mm->mmap_sem);
 	for (vma = mm->mmap; vma; vma = vma->vm_next) {
@@ -1802,8 +1800,8 @@ struct reclaim_param reclaim_task_anon(struct task_struct *task,
 			break;
 
 		rp.vma = vma;
-		walk_page_range(vma->vm_start, vma->vm_end,
-			&reclaim_walk);
+		walk_page_range(mm, vma->vm_start, vma->vm_end,
+			&reclaim_walk_ops, &rp);
 	}
 
 	flush_tlb_mm(mm);
@@ -1823,7 +1821,6 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	struct vm_area_struct *vma;
 	enum reclaim_type type;
 	char *type_buf;
-	struct mm_walk reclaim_walk = {};
 	unsigned long start = 0;
 	unsigned long end = 0;
 	struct reclaim_param rp;
@@ -1887,12 +1884,8 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	if (!mm)
 		goto out;
 
-	reclaim_walk.mm = mm;
-	reclaim_walk.pmd_entry = reclaim_pte_range;
-
 	rp.nr_to_reclaim = INT_MAX;
 	rp.nr_reclaimed = 0;
-	reclaim_walk.private = &rp;
 
 	down_read(&mm->mmap_sem);
 	if (type == RECLAIM_RANGE) {
@@ -1904,9 +1897,9 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 				continue;
 
 			rp.vma = vma;
-			ret = walk_page_range(max(vma->vm_start, start),
+			ret = walk_page_range(mm, max(vma->vm_start, start),
 					min(vma->vm_end, end),
-					&reclaim_walk);
+					&reclaim_walk_ops, &rp);
 			if (ret)
 				break;
 			vma = vma->vm_next;
@@ -1923,8 +1916,8 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 				continue;
 
 			rp.vma = vma;
-			ret = walk_page_range(vma->vm_start, vma->vm_end,
-				&reclaim_walk);
+			ret = walk_page_range(mm, vma->vm_start, vma->vm_end,
+				&reclaim_walk_ops, &rp);
 			if (ret)
 				break;
 		}
