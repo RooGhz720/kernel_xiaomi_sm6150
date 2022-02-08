@@ -31,14 +31,14 @@ zstd_compress-y := \
 		compress/zstd_ldm.o \
 		compress/zstd_opt.o \
 
-# This older kernel/build system will not react nicely to adding files from common/ twice
-# So just don't add them twice...
 zstd_decompress-y := \
 		zstd_decompress_module.o \
+		common/debug.o \
+		common/entropy_common.o \
+		common/error_private.o \
+		common/fse_decompress.o \
+		common/zstd_common.o \
 		decompress/huf_decompress.o \
 		decompress/zstd_ddict.o \
 		decompress/zstd_decompress.o \
 		decompress/zstd_decompress_block.o \
-
-
-# This will cause breakage when ZSTD_DECOMPRESS=y and ZSTD_COMPRESS=n (Which is never?)
