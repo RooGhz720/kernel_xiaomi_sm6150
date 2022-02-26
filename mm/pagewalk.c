@@ -122,20 +122,24 @@ static int walk_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end,
 {
 	p4d_t *p4d;
 	unsigned long next;
-	const struct mm_walk_ops *ops = walk->ops;
 	int err = 0;
 
 	p4d = p4d_offset(pgd, addr);
 	do {
 		next = p4d_addr_end(addr, end);
 		if (p4d_none_or_clear_bad(p4d)) {
-			if (ops->pte_hole)
-				err = ops->pte_hole(addr, next, walk);
+			if (walk->pte_hole)
+				err = walk->pte_hole(addr, next, walk);
 			if (err)
 				break;
 			continue;
 		}
-		if (ops->pmd_entry || ops->pte_entry)
+		if (walk->p4d_entry) {
+			err = walk->p4d_entry(p4d, addr, next, walk);
+			if (err)
+				break;
+		}
+		if (walk->pmd_entry || walk->pte_entry)
 			err = walk_pud_range(p4d, addr, next, walk);
 		if (err)
 			break;
@@ -149,20 +153,19 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 {
 	pgd_t *pgd;
 	unsigned long next;
-	const struct mm_walk_ops *ops = walk->ops;
 	int err = 0;
 
 	pgd = pgd_offset(walk->mm, addr);
 	do {
 		next = pgd_addr_end(addr, end);
 		if (pgd_none_or_clear_bad(pgd)) {
-			if (ops->pte_hole)
-				err = ops->pte_hole(addr, next, walk);
+			if (walk->pte_hole)
+				err = walk->pte_hole(addr, next, walk);
 			if (err)
 				break;
 			continue;
 		}
-		if (ops->pmd_entry || ops->pte_entry)
+		if (walk->p4d_entry || walk->pmd_entry || walk->pte_entry)
 			err = walk_p4d_range(pgd, addr, next, walk);
 		if (err)
 			break;
