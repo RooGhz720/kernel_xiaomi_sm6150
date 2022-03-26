@@ -2215,6 +2215,24 @@ struct timespec64 get_monotonic_coarse64(void)
 }
 EXPORT_SYMBOL(get_monotonic_coarse64);
 
+void ktime_get_coarse_ts64(struct timespec64 *ts)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	struct timespec64 now, mono;
+	unsigned int seq;
+
+	do {
+		seq = read_seqcount_begin(&tk_core.seq);
+
+		now = tk_xtime(tk);
+		mono = tk->wall_to_monotonic;
+	} while (read_seqcount_retry(&tk_core.seq, seq));
+
+	set_normalized_timespec64(ts, now.tv_sec + mono.tv_sec,
+				now.tv_nsec + mono.tv_nsec);
+}
+EXPORT_SYMBOL(ktime_get_coarse_ts64);
+
 /*
  * Must hold jiffies_lock
  */
