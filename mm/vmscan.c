@@ -55,6 +55,7 @@
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/mmu_notifier.h>
+#include <linux/overflow.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -1027,7 +1028,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			sc->nr_scanned++;
 
 		/* in case the page was found accessed by lru_gen_scan_around() */
-		if (lru_gen_enabled() && !skip_reference_check &&
+		if (lru_gen_enabled() && !force_reclaim &&
 		    page_mapped(page) && PageReferenced(page))
 			goto keep_locked;
 
