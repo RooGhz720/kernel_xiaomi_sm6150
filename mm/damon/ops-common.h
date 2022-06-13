@@ -17,3 +17,5 @@ bool damon_pa_young(unsigned long paddr, unsigned long *page_sz);
 
 int damon_pageout_score(struct damon_ctx *c, struct damon_region *r,
 			struct damos *s);
+int damon_hot_score(struct damon_ctx *c, struct damon_region *r,
+			struct damos *s);
