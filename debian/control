@@ -1,0 +1,76 @@
+Source: msm-4.14
+Section: kernel
+Priority: optional
+Maintainer: dopaemon <polarisdp@gmail.com>
+Uploaders: Eugenio Paolantonio (g7) <eugenio@droidian.org>,
+           r3vn <giuseppe@droidian.org>,
+           Erfan Abdi <erfan@droidian.org>,
+           Erik Inkinen <erik@droidian.org>,
+Build-Depends: build-essential,
+               dpkg-dev,
+               findutils,
+               python2,
+               debhelper (>= 13),
+               bc,
+               rsync,
+               kmod,
+               cpio,
+               bison,
+               flex,
+               libssl-dev,
+               linux-initramfs-halium-generic,
+               linux-packaging-snippets,
+               android-sdk-ufdt-tests,
+               mkbootimg (>= 10.0.0),
+               mkdtboimg,
+               avbtool,
+               device-tree-compiler, linux-initramfs-halium-generic:arm64, binutils-aarch64-linux-gnu, clang-android-10.0-r370808, gcc-4.9-aarch64-linux-android, g++-4.9-aarch64-linux-android, libgcc-4.9-dev-aarch64-linux-android-cross
+Standards-Version: 4.5.0.3
+Vcs-Browser: https://github.com/dopaemon/msm-4.14
+Vcs-Git: https://github.com/dopaemon/msm-4.14.git
+
+Package: linux-image-4.14-0-xiaomi-sweet
+Architecture: arm64
+Depends: ${misc:Depends}
+Description: Linux kernel for Xiaomi Redmi Note 10 Pro
+ This package contains the Linux kernel for the Xiaomi Redmi Note 10 Pro device.
+ .
+ Note: This package only ships the kernel image and modules, you should probably
+ look at the linux-bootimage-4.14-0-xiaomi-sweet package for a bootimage suitable
+ for Android boot loaders.
+
+Package: linux-bootimage-4.14-0-xiaomi-sweet
+Architecture: arm64
+Pre-Depends: flash-bootimag
+Depends: ${misc:Depends},
+         linux-image-4.14-0-xiaomi-sweet (= ${binary:Version})
+Description: Linux kernel for Xiaomi Redmi Note 10 Pro - Android Boot Image
+ This package contains the Linux kernel for the Xiaomi Redmi Note 10 Pro device.
+ .
+ Note: This package ships an Android Boot Image bundled with Halium's
+ initramfs.
+
+Package: linux-headers-4.14-0-xiaomi-sweet
+Architecture: arm64
+Depends: ${misc:Depends},
+         linux-image-4.14-0-xiaomi-sweet (= ${binary:Version})
+Description: Linux kernel for Xiaomi Redmi Note 10 Pro - Headers
+ This package contains the Linux kernel headers for the Xiaomi Redmi Note 10 Pro device.
+
+Package: linux-image-xiaomi-sweet
+Architecture: arm64
+Depends: linux-image-4.14-0-xiaomi-sweet (= ${binary:Version})
+Description: Linux kernel for Xiaomi Redmi Note 10 Pro (latest)
+ This package depends to the latest kernel image available for the Xiaomi Redmi Note 10 Pro.
+
+Package: linux-bootimage-xiaomi-sweet
+Architecture: arm64
+Depends: linux-bootimage-4.14-0-xiaomi-sweet (= ${binary:Version})
+Description: Linux kernel for Xiaomi Redmi Note 10 Pro - Android Boot Image  (latest)
+ This package depends to the latest kernel bootimage available for the Xiaomi Redmi Note 10 Pro.
+
+Package: linux-headers-xiaomi-sweet
+Architecture: arm64
+Depends: linux-headers-4.14-0-xiaomi-sweet (= ${binary:Version})
+Description: Linux kernel for Xiaomi Redmi Note 10 Pro - Headers (latest)
+ This package depends to the latest kernel headers available for the Xiaomi Redmi Note 10 Pro.

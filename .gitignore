@@ -125,3 +125,16 @@ all.config
 
 # fetched Android config fragments
 kernel/configs/android-*.cfg
+
+# Droidian
+!.gitmodules
+!debian
+debian/changelog
+debian/path-override
+debian/*.substvars
+debian/*.debhelper
+debian/files
+debian/debhelper-build-stamp
+debian/linux-*/
+debian/*.postinst
+out/

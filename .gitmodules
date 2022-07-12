@@ -1,0 +1,3 @@
+[submodule "droidian/common_fragments"]
+	path = droidian/common_fragments
+	url = https://github.com/droidian-devices/common_fragments.git
