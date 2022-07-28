@@ -1190,7 +1190,6 @@ void cp_statemachine(unsigned int port)
 
 static void cp_workfunc(struct work_struct *work)
 {
-	struct power_supply *psy;
 	cp_get_usb_type();
 
 	cp_update_sw_status();
@@ -1203,13 +1202,10 @@ static void cp_workfunc(struct work_struct *work)
 	/* check whether usb is present */
 	if (pm_state.usb_present == 0) {
 		cp_set_qc_bus_protections(HVDCP3_NONE);
-		cp_set_fake_hvdcp3(false);
-		psy = power_supply_get_by_name("ln8000");
-		if (psy)
-			pm_state.state = CP_STATE_DISCONNECT;
-
+#ifdef CONFIG_CHARGER_LN8000
+		pm_state.state = CP_STATE_DISCONNECT;
+#endif
 		return;
-
 	}
 
 	if (pm_state.usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3) {
