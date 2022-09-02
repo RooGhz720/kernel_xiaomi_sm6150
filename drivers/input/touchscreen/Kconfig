@@ -1312,7 +1312,10 @@ config TOUCHSCREEN_RAYDIUM_CHIPSET
 
 	  If unsure, say N.
 
-source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+# Hide focaltech_touch for now. It appears as if the Kconfig symbol
+# TOUCHSCREEN_FTS is overloaded: It is used for different drivers in
+# stm/Kconfig and focaltech_touch_Kconfig
+# source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 config TOUCHSCREEN_COMMON
 	bool "Common touchscreen interface to interact with userspace"

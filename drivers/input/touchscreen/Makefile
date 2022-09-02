@@ -112,7 +112,10 @@ obj-$(CONFIG_TOUCHSCREEN_RAYDIUM_CHIPSET)  += raydium_wt030/
 obj-$(CONFIG_TOUCHSCREEN_RASPBERRYPI_FW)	+= raspberrypi-ts.o
 obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
 obj-$(CONFIG_TOUCHSCREEN_ST)	+= st/
-obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/
+# Hide focaltech_touch for now. It appears as if the Kconfig symbol
+# TOUCHSCREEN_FTS is overloaded: It is used for different drivers in
+# stm/Kconfig and focaltech_touch_Kconfig
+# obj-$(CONFIG_TOUCHSCREEN_FTS)		+= focaltech_touch/
 obj-$(CONFIG_TOUCHSCREEN_TDDI_DBCLK) += double_click.o
 obj-$(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE) += xiaomi/
 obj-$(CONFIG_TOUCHSCREEN_FTS) += focaltech_spi/
