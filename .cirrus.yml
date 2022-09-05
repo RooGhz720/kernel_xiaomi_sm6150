@@ -17,9 +17,6 @@ env:
     KBUILD_BUILD_HOST: "CurrusCI"
     KBUILD_BUILD_USER: "dopaemon"
 
-    # ZIP ENV
-    ZIPTIME: $(date +'%d%m%Y')
-
     # OUT ENV
     IMG: "/home/doraemon/msm-4.14/out/arch/arm64/boot/Image.gz-dtb"
     DTBO: "/home/doraemon/msm-4.14/out/arch/arm64/boot/dtbo.img"
@@ -64,8 +61,8 @@ task:
     - cp -r $DTBO ~/Anykernel3/
     - cp -r $DTB ~/Anykernel3/
     - cd ~/Anykernel3/
-    - zip -rv9 Doraemon-Kernel-"$ZIPTIME"-OSS-n10p.zip *
-    - mv ~/Anykernel3/Doraemon-Kernel-"$ZIPTIME"-OSS-n10p.zip ~/
+    - zip -rv9 Doraemon-Kernel-Latest-OSS-n10p.zip *
+    - mv ~/Anykernel3/Doraemon-Kernel-Latest-OSS-n10p.zip ~/
 
   compile_miui_script:
     - cd ~/msm-4.14
@@ -80,16 +77,16 @@ task:
     - cp -r $DTBO ~/Anykernel3/
     - cp -r $DTB ~/Anykernel3/
     - cd ~/Anykernel3/
-    - zip -rv9 Doraemon-Kernel-"$ZIPTIME"-Miui-n10p.zip *
-    - mv ~/Anykernel3/Doraemon-Kernel-"$ZIPTIME"-Miui-n10p.zip ~/
+    - zip -rv9 Doraemon-Kernel-Latest-Miui-n10p.zip *
+    - mv ~/Anykernel3/Doraemon-Kernel-Latest-Miui-n10p.zip ~/
 
   signer_script:
     - cd ~/
-    - java -jar zipsigner-3.0.jar Doraemon-Kernel-"$ZIPTIME"-OSS-n10p.zip Doraemon-Kernel-"$ZIPTIME"-OSS-n10p-signed.zip
-    - java -jar zipsigner-3.0.jar Doraemon-Kernel-"$ZIPTIME"-Miui-n10p.zip Doraemon-Kernel-"$ZIPTIME"-Miui-n10p-signed.zip
+    - java -jar zipsigner-3.0.jar Doraemon-Kernel-Latest-OSS-n10p.zip Doraemon-Kernel-Latest-OSS-n10p-signed.zip
+    - java -jar zipsigner-3.0.jar Doraemon-Kernel-Latest-Miui-n10p.zip Doraemon-Kernel-Latest-Miui-n10p-signed.zip
     - ls
 
   upload_script:
     - cd ~/
-    - $RCLONE copy -v Doraemon-Kernel-"$ZIPTIME"-OSS-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/"$ZIPTIME"/
-    - $RCLONE copy -v Doraemon-Kernel-"$ZIPTIME"-Miui-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/"$ZIPTIME"/
+    - $RCLONE copy -v Doraemon-Kernel-Latest-OSS-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/
+    - $RCLONE copy -v Doraemon-Kernel-Latest-Miui-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/
