@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# This script verifies that the kernel HA .spec template is up to date.
+#
+# It's hard to keep all customer kernel HA .spec files up-to-date
+# automatically This will cause kernel builds to fail (by default) or
+# warn.
+#
+# The approach is to put a call to this script into the .spec
+# template/boilerplate with a hard-coded value that corresponds to the
+# version of the template. This script must be updated each time the
+# .spec is updated in a way that requires a change.
+#
+# The .spec simply runs:
+#  /usr/bin/mer_verify_kernel_spec 1 [--fatal-if-old]
+#
+# The script will typically examine the version passed and the version
+# hard-coded in and, if it's out of date it will print a message
+# (probably pointing to a web page with instructions). Depending on
+# the flag the script will either exit with an error or not.
+#
+# The developer of course can either update the template at once, make
+# it a warning only or remove the check altogether.
+
+TEMPLATE_VERSION=1
+
+if (( $# < 1 )); then
+    echo "You need to enter template version as first parameter."
+    echo "$0 VERSION"
+    exit 1
+fi
+
+SPEC_VERSION=$1
+
+if (( $TEMPLATE_VERSION > $SPEC_VERSION )); then
+    echo
+    echo
+    echo "Your kernel .spec is using an out of date template."
+    echo
+    echo "Please see http://wiki.merproject.org/wiki/Category:Kernel"
+
+    if [[ $2 == "--fatal-if-old" ]]; then
+	exit 1;
+    else
+	exit 0;
+    fi
+fi
+

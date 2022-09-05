@@ -1,0 +1,334 @@
+#!/usr/bin/perl -w
+# Mer Kernel config specification checker
+# http://wiki.merproject.org/wiki/Adaptation_Guide
+
+# CONFIG must be set to one of the permitted values "," seperated and
+# multiple values permitted
+
+# y = set and enabled
+# m = set and module
+# n = must be unset (commented out)
+#
+# "value" = must be set to "value"
+# /regexp/ = "value" which matches regexp
+#
+# ! = Failure will be warned, not errored
+
+# Known issues with the basic parser:
+# * # in regexps or strings cause issues if there's no trailing #
+# * can't have "," in /regexp/
+
+use Text::ParseWords;
+use strict;
+
+my $debug = 0;
+my %config;
+
+
+=item cmp_version()
+
+=head1 NAME cmp_version - compare two version strings
+
+=head1 SYNOPSIS
+  cmp_version(1.0, >=, 2.0);
+
+=head1 DESCRIPTION
+
+Compare C<$version> and C<$version1> with C<operator>.
+Just like if ( ) but for version strings.
+=cut
+
+sub cmp_version
+{
+
+  my $st_version = shift;
+  my $operator = shift;
+  my $nd_version = shift;
+
+  return version->parse($st_version) < version->parse($nd_version)
+      if $operator eq '<';
+  return version->parse($st_version) > version->parse($nd_version)
+      if $operator eq '>';
+  return version->parse($st_version) >= version->parse($nd_version)
+      if $operator eq '>=';
+  return version->parse($st_version) == version->parse($nd_version)
+      if $operator eq '==';
+  return version->parse($st_version) <= version->parse($nd_version)
+      if $operator eq '<=';
+  return version->parse($st_version) != version->parse($nd_version)
+      if $operator eq '!=';
+}
+
+while (<DATA>) {
+  next if /^\s*(#.*)?$/ ; # skip comments and blank lines
+  chomp;
+
+  my ($conf, $allowed) = split(' ', $_, 2);
+
+  # Remove and capture any trailing comment (dubious matching here
+  # since comments in a "" or // will be removed too)
+  my $comment;
+  if ($allowed =~ s/(#\s*)(.*)?$//) {
+    $comment = $2 if $2;
+  }
+
+  # http://perldoc.perl.org/Text/ParseWords.html
+  my @allowed = parse_line(",", 1, $allowed);
+
+  my $warning;
+  my $version;
+  # Strip leading/trailing space for each value and check for warnings
+  foreach (@allowed) {
+    s/^\s+|\s+$//g;
+    $warning = 1 if $_ eq "!" ;
+    $version = $_ if m/[\d\.<>=]/;
+  }
+
+  # Each CONFIG_* has an array of allowed values, a comment and a flag
+  # to say it's only a warning (in which case we print the comment)
+  $config{$conf} = {allowed => \@allowed,
+                    comment => $comment,
+                    warning => $warning,
+                    version => $version};
+}
+
+my $kconfig_line = 0;
+my $kernel_version;
+
+print "\nScanning\n" if $debug;
+while (<>) {
+
+  if (!$kernel_version  and $kconfig_line < 4 ) {
+     print "HEADER:$_" if $debug;
+     if ($_ =~ /[[:digit:]]{1,2}\.[[:digit:]]{1,2}\.[[:digit:]]{1,3}/) {
+      # Find string with kernel version and extract version number from it
+      $_ =~ s/#//;
+      # Remove extra version number which is separated by + (e.g. Linux/arm 4.4.184+0.0.6)
+      $_ =~ tr/+/ /;
+      $kernel_version = (split(' ', $_, 3))[1];
+      print "Kernel version $kernel_version\n" if $debug;
+      # Look for values that aren't valid for $kernel_version
+      for my $conf (keys %config)
+      {
+         my $c = $config{$conf};
+         if ($c->{"version"})
+         {
+            my $config_version = $c->{"version"};
+            my $operator = $config_version;
+            $operator =~ s/[\d\s\w\.]//g;
+            $config_version =~ s/[><=]//g;
+            if(!cmp_version($kernel_version, $operator, $config_version))
+            {
+               delete($config{$conf});
+               print "Removing $conf, $kernel_version, $operator, $config_version\n"
+                   if $debug;
+            }
+         }
+      }
+    }
+  }
+  next if /^\s*(#.*)?$/ ; # skip comments and blank lines
+  $kconfig_line++;
+  chomp;
+  my ($conf, $value) = split('=', $_, 2);
+
+  # Only check CONFIG_* values we know about
+  next unless $config{$conf};
+
+  my $c = $config{$conf};
+
+  print "$conf matched, checking..." if $debug;
+  $c->{"value"} = $value; # Store the value for later reporting
+
+  my $allowed = $c->{"allowed"};
+  for my $allow (@$allowed) {
+    if (substr($allow,1,1) eq '/') { # regexps
+      print "Do a regex match : \"$value\" =~ $allow\n" if $debug;
+
+    } elsif (substr($allow,1,1) eq '"') { # strings
+      print "Do a string match : $allow == $value\n" if $debug;
+      if ($value eq $allow) {$c->{"valid"} = 1; }
+
+    } else { # plain y/m values
+      print "match y/m : $value == $allow\n" if $debug;
+      if ($value eq $allow) {$c->{"valid"} = 1; }
+    }
+  }
+  if ($c->{"valid"}) { print "OK\n" if $debug;}
+}
+
+print "Results\n" if $debug;
+print "WARNING: kernel version missing, some reports maybe misleading\n"
+    if not $kernel_version;
+my $fatal = 0;
+for my $conf (keys %config) {
+  my $c = $config{$conf};
+
+  if (! $c->{"valid"}) { # Check for 'n' case
+    foreach my $allow (@{$c->{"allowed"}}) {
+      if (("$allow" eq "n") and ! $c->{"value"}) {
+	$c->{"valid"} = 1;
+      }
+    }
+  }
+
+  # Now report
+  if (! $c->{"valid"}) {
+    print defined($c->{"warning"}) ? "WARNING: " : "ERROR: ";
+    print "$conf is invalid\n";
+    if ($c->{"value"}) {
+      print "Value is: ". $c->{"value"} ."\n";
+    } else {
+      print "It is unset\n";
+    }
+    print "Allowed values : ".join(", ", @{$c->{"allowed"}}) ."\n";
+    print "Comment says: ". $c->{"comment"}."\n\n";
+    if (! $c->{"warning"}) {
+      $fatal = 1;
+    }
+  }
+}
+exit $fatal;
+
+
+
+
+
+
+
+
+__DATA__
+CONFIG_ANDROID_LOW_MEMORY_KILLER	y,! # Helping memory handling at least with Android runtime (tested on Jolla C)
+CONFIG_ANDROID_PARANOID_NETWORK	y,n       # Since Android 5 on some devices this flag is needed for rild to work. But it breaks connectivity in Sailfish OS if user nemo is not part of inet group. "y,n" switch means that this flag's presence/absence won't fail the checks anymore, but instead dhd will autodetect it and add nemo to inet
+CONFIG_AUDIT			y,!	# Required by SELinux. Can be disabled at boottime via kernel cmdline: audit=0. You can also leave audit enabled, if you don't plan to use systemd's containers: http://cgit.freedesktop.org/systemd/systemd/commit/README?id=77b6e19458f37cfde127ec6aa9494c0ac45ad890
+CONFIG_AUTOFS4_FS		y,m,!	# systemd (optional): http://cgit.freedesktop.org/systemd/systemd/commit/README?id=713bc0cfa477ca1df8769041cb3dbc83c10eace2
+CONFIG_BRIDGE			y,m,!   # connman (optional): support tethering, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=19fe7cad485afa6a7a5cc4aa75615ce8b7b8d376
+CONFIG_CPUSETS			y,m,!	# lxc (optional): required to run lxc containers
+CONFIG_IP_NF_TARGET_MASQUERADE	y,m,!   # connman (optional): support tethering, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=19fe7cad485afa6a7a5cc4aa75615ce8b7b8d376
+CONFIG_IP_NF_IPTABLES		y,m,!	# connman (optional): for routing and statistic support in sessions, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=41f37125887cb9208da2441e350e1e3324c17ee6
+CONFIG_IP_MULTIPLE_TABLES	y,m,!	# connman (optional): for routing and statistic support in sessions, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=41f37125887cb9208da2441e350e1e3324c17ee6
+CONFIG_NETFILTER_NETLINK_ACCT	y,m,!	# connman (optional): for routing and statistic support in sessions, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=41f37125887cb9208da2441e350e1e3324c17ee6
+CONFIG_NETFILTER_XT_MATCH_NFACCT	y,m,!	# connman (optional): for routing and statistic support in sessions, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=41f37125887cb9208da2441e350e1e3324c17ee6
+CONFIG_NETFILTER_XT_CONNMARK		y,m,!	# connman (optional): for routing and statistic support in sessions, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=115cb9cbd3cdda00784e58a4ea12b42d128732b4
+CONFIG_NETFILTER_XT_TARGET_CONNMARK	y,m,!	# connman (optional): for routing and statistic support in sessions, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=115cb9cbd3cdda00784e58a4ea12b42d128732b4
+CONFIG_NETFILTER_XT_MATCH_CONNMARK	y,m,!	# connman (optional): for routing and statistic support in sessions, http://git.kernel.org/cgit/network/connman/connman.git/commit/README?id=115cb9cbd3cdda00784e58a4ea12b42d128732b4
+CONFIG_NETFILTER_XT_MATCH_CONNTRACK	y	# connman: for iptables conntrack match
+CONFIG_NETFILTER_XT_MATCH_DCCP	y,m,!	# connman: for iptables dccp match
+CONFIG_NETFILTER_XT_MATCH_HASHLIMIT	y,m,!	# connman: for iptables hashlimit match
+CONFIG_NETFILTER_XT_MATCH_IPRANGE	y,m,!	# connman: for iptables iprange match
+CONFIG_NETFILTER_XT_MATCH_MARK	y,m,!	# connman: for iptables mark match
+CONFIG_NETFILTER_XT_MATCH_MULTIPORT	y	# connman: for iptables multiple port match
+CONFIG_NETFILTER_XT_MATCH_QTAGUID	y,m,<=4.13.0 # connman: for iptables owner/qtaguid match, deprecated after Android Q, non-mainline feature https://android.googlesource.com/kernel/configs/+/189cbab05f8680af3778b82a0b899485773e42e9%5E%21/android-4.14/android-base.config
+CONFIG_NETFILTER_XT_MATCH_OWNER	y,m,>=4.14.0	# connman: for iptables owner match
+CONFIG_NETFILTER_XT_MATCH_RECENT	y,m,!	# connman: for iptables recent match
+CONFIG_NETFILTER_XT_MATCH_SCTP	y,m,!	# connman: for iptables sctp match
+CONFIG_NETFILTER_XT_MATCH_STATE	y,m,!	# connman: for iptables state match
+CONFIG_NETFILTER_XT_MATCH_PKTTYPE	y,m,!	# connman: for iptables pkttype match
+CONFIG_NETFILTER_XT_MATCH_LIMIT	y,m,!	# connman: for iptables limit match
+CONFIG_NETFILTER_XT_MATCH_HELPER	y,m,!	# connman: for iptables helper match
+CONFIG_NETFILTER_XT_MATCH_ESP	y,m,!	# connmman: for iptables esp match
+CONFIG_IP_NF_MATCH_AH	y,m,!	# connman: for iptables ah match
+CONFIG_IP_NF_MATCH_ECN	y,m,!	# connman: for iptables ecn match
+CONFIG_IP_NF_MATCH_TTL	y,m,!	# connman: for iptables ttl match
+CONFIG_IP6_NF_MATCH_AH	y,m,!	# connman: for ip6tables ah match
+CONFIG_IP6_NF_MATCH_FRAG	y,m,!	# connman: for ip6tables frag match
+CONFIG_IP6_NF_MATCH_MH	y,m,!	# connman: for ip6tables mh match
+CONFIG_CGROUPS			y       # systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_CGROUP_FREEZER		y,!	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_CGROUP_DEVICE		y,!	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_CGROUP_CPUACCT		y,!	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_CGROUP_MEM_RES_CTLR	y,!,<=3.5	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README, only valid if kernel version <= 3.5
+CONFIG_CGROUP_MEM_RES_CTLR_SWAP	y,!,<=3.5	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README, only valid if kernel version <= 3.5
+CONFIG_CGROUP_MEM_RES_CTLR_KMEM	y,!,<=3.5	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README, only valid if kernel version <= 3.5
+CONFIG_MEMCG			y,!,>=3.6	# systemd (optional, but recommended): https://github.com/systemd/systemd/blob/v238/README, only valid if version >= 3.6
+CONFIG_MEMCG_SWAP		y,!,>=3.6	# systemd (optional, but recommended): https://github.com/systemd/systemd/blob/v238/README, only valid if kernel version >= 3.6
+CONFIG_MEMCG_KMEM		y,!,>=3.6	# systemd (optional, but recommended): https://github.com/systemd/systemd/blob/v238/README, only valid if kernel version >= 3.6
+CONFIG_CGROUP_PERF		y,!	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_CGROUP_SCHED		y,!	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_BLK_CGROUP		y,!	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_NET_CLS_CGROUP		y,!	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_NETPRIO_CGROUP		y,!,<=3.13	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_CGROUP_NET_PRIO		y,!,>=3.14	# systemd (optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_DEVTMPFS			y       # systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_DUMMY			n
+CONFIG_FHANDLE			y	# systemd: http://cgit.freedesktop.org/systemd/systemd/commit/README?id=001809282918f273d372f1ee09d10b783c18a474
+CONFIG_SCHEDSTATS		y,!	# systemd-bootchart (optional): http://cgit.freedesktop.org/systemd/systemd/commit/README?id=f1c24fea94e19cf2108abbeed1d36ded7102ab98
+CONFIG_SCHED_DEBUG		y,!	# systemd-bootchart (optional): http://cgit.freedesktop.org/systemd/systemd/commit/README?id=f1c24fea94e19cf2108abbeed1d36ded7102ab98
+CONFIG_NLS_UTF8			y	# Ensure that we support UTF8 filenames.
+CONFIG_BT			y,!	# Bluez (optional): Needed if bluez used as bluetooth stack
+CONFIG_BT_RFCOMM		y,!	# Bluez (optional): Needed if bluez used as bluetooth stack
+CONFIG_BT_HCIUART		y,!     # Bluez (optional): Needed if bluez used as bluetooth stack
+CONFIG_BT_HCIUART_H4		y,!	# Bluez (optional): Needed if bluez used as bluetooth stack
+CONFIG_BT_MSM_SLEEP		n,!	# Bluez (optional): Causes problems with bluez thus disabling is recommended.
+CONFIG_HIDRAW			y,m,!	# optional: Support HID devices
+CONFIG_UNIX			y	# UNIX sockets option is required to run Mer
+CONFIG_SYSVIPC			y	# Inter Process Communication option is required to run Mer
+CONFIG_EXT4_FS			y,m,!	# Mer uses ext4 as rootfs by default
+CONFIG_CUSE			y,!,>=2.6	# CUSE (optional): Required for software security modules support.
+CONFIG_FANOTIFY			y,!	# optional, required for systemd readahead.
+CONFIG_INOTIFY_USER		y	# systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_IPV6			y,m,!	# systemd: http://cgit.freedesktop.org/systemd/systemd/tree/README#n37
+CONFIG_MODULES			y,!	# optional, required for module support (Such as WLAN for example)
+CONFIG_RTC_DRV_CMOS		y,!	# optional, but highly recommended, not avialable on arm64
+CONFIG_SIGNALFD			y	# systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_TIMERFD			y	# systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_EPOLL			y	# systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_NET			y	# systemd: http://cgit.freedesktop.org/systemd/systemd/commit/README?id=41938693e76c32161d2b3b83253ce996468cbf9b
+CONFIG_SYSFS			y	# systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_PROC_FS			y	# systemd: http://cgit.freedesktop.org/systemd/systemd/commit/README?id=06d461ee6f3da6650e6d023d7828455752d70b0b
+CONFIG_SYSFS_DEPRECATED		n	# systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_TMPFS_POSIX_ACL		y	# systemd: required by hybris-boot init-script, if you want pam_systemd.so to setup your "seats". http://cgit.freedesktop.org/systemd/systemd/commit/README?id=77b6e19458f37cfde127ec6aa9494c0ac45ad890
+CONFIG_TMPFS_XATTR		y,!	# systemd (optional): strongly recommended, https://github.com/systemd/systemd/blob/v238/README
+CONFIG_SECCOMP			y,!	# systemd (optional): strongly recommended, http://cgit.freedesktop.org/systemd/systemd/commit/README?id=f28cbd0382ca53baa99803bbc907a469fbf68128
+CONFIG_TUN                      y,m,!   # ofono: http://git.kernel.org/?p=network/ofono/ofono.git;a=blob;f=README;h=413d789e5f9e96024986f5116d3c8aff0c9f15b8;hb=HEAD#l28
+CONFIG_UEVENT_HELPER_PATH	"", !	# should be empty, if you want to use systemd without initramfs. Also systemd: https://github.com/systemd/systemd/blob/v238/README
+CONFIG_FW_LOADER_USER_HELPER	n,!	# it's actually needed by some Lollipop based devices; systemd(optional): https://github.com/systemd/systemd/blob/v238/README
+CONFIG_VT			y	# Required for virtual consoles
+CONFIG_LBDAF			y,!	# ext4 filesystem requires this in order to support filesysetms with huge_file feature, which is enabled by default by mke2fs.ext4, not needed for 64bit architectures
+CONFIG_WATCHDOG_NOWAYOUT	y,!	# If device uses watchdogs with dsme (https://github.com/sailfishos/dsme), this option should be enabled or watchdog does not protect the device in case dsme crashes.
+CONFIG_CHECKPOINT_RESTORE	y,!	# rich-core-dumper (https://github.com/mer-tools/sp-rich-core/) needs this to collect all data for environment recreation.
+CONFIG_RD_GZIP			y	# Required by hybris-boot Android.mk
+CONFIG_IKCONFIG_PROC		y	# Required by hybris-boot init-script
+CONFIG_DEVTMPFS_MOUNT		y	# Required by hybris-boot init-script
+CONFIG_SECURITY_SELINUX		y,!	# Most hybris adaptations must have SELinux builtin in kernel
+CONFIG_SECURITY_SELINUX_BOOTPARAM	y,!	# Up to hybris-16 it's recommended to have SELinux disabled at boottime via kernel cmdline: selinux=0 or SECURITY_SELINUX_BOOTPARAM_VALUE=0. For hybris-17 SELinux should be left enabled.
+CONFIG_SECURITY_SELINUX_BOOTPARAM_VALUE 0,! # Alternative way to disable SELinux at boottime
+CONFIG_UTS_NS 			y,!	# optional, enables kernel namespaces for systemd-nspawn containers
+CONFIG_IPC_NS			y,!	# optional, enables kernel namespaces for systemd-nspawn containers
+CONFIG_PID_NS			y,!	# optional, enables kernel namespaces for systemd-nspawn containers
+CONFIG_NET_NS			y,!	# optional, enables kernel namespaces for systemd-nspawn containers
+CONFIG_SECURITY_YAMA		y,!     # optional, prevents user's processes from ptracing each other
+CONFIG_SECURITY_YAMA_STACKED	y,!,<4.3     # optional, only valid for kernel < 4.3
+CONFIG_NETWORK_FILESYSTEMS	y,!     # optional, for NFS support
+CONFIG_NFS_FS			y,m,!     # optional, for NFS support
+CONFIG_NFS_V3			y,!     # optional, for NFS support
+CONFIG_NFS_V3_ACL		y,!     # optional, for NFS support
+CONFIG_NFS_V4			y,!     # optional, for NFS support
+CONFIG_NFS_V4_1			y,!     # optional, for NFS support
+CONFIG_NFS_USE_KERNEL_DNS	y,!     # optional, for NFS support
+CONFIG_NFS_ACL_SUPPORT		y,m,!     # optional, for NFS support
+CONFIG_NFS_COMMON			y,!     # optional, for NFS support
+CONFIG_LOCKD			y,m,!     # optional, for NFS support
+CONFIG_LOCKD_V4			y,!     # optional, for NFS support
+CONFIG_SUNRPC			y,m,!     # optional, for NFS support
+CONFIG_SUNRPC_GSS			y,m,!     # optional, for NFS support
+CONFIG_BLK_DEV_NBD			y,m,!     # optional, for NFS & CIFS support
+CONFIG_ISO9660_FS			y,m,!     # optional extra filesystem (CD-ROM)
+CONFIG_UDF_FS			y,m,!     # optional extra filesystem (DVD & portable USB)
+CONFIG_ECRYPT_FS			y,m,!     # optional extra filesystem (ecryptfs)
+CONFIG_F2FS_FS			y,m,!     # optional extra filesystem (f2fs - a good SD filesystem)
+CONFIG_F2FS_FS_SECURITY		y,m,!     # required to mount f2fs volumes under SELinux
+CONFIG_CIFS			y,m,!     # optional extra filesystem (CIFS - Windows net fs)
+CONFIG_BTRFS_FS			y,!     # optional extra filesystem (BTRFS)
+CONFIG_IP_NF_MATCH_RPFILTER	y	# Add to have both IPv4 and IPv6 RPFILTER matches set
+CONFIG_IP6_NF_MATCH_RPFILTER	y	# To be able to mitigate CVE-2019-14899 with ConnMan iptables rule
+CONFIG_NF_NAT_IPV6		y,m,!	# connman: to enable IPv6 NAT
+CONFIG_QUOTA			y	# Quota is needed to prevent additional users from taking all space
+CONFIG_QUOTACTL			y	# To adjust quota
+CONFIG_QUOTA_NETLINK_INTERFACE	y	# For quota_nld service
+CONFIG_QFMT_V2			y	# Use this version of the interface for quotactl
+CONFIG_NAMESPACES		y	# Namespacing is needed by firejail
+CONFIG_UTS_NS			y	# Namespacing option needed by firejail
+CONFIG_IPC_NS			y	# Namespacing option needed by firejail
+CONFIG_PID_NS			y	# Namespacing option needed by firejail
+
