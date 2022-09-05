@@ -18,7 +18,7 @@ env:
     KBUILD_BUILD_USER: "dopaemon"
 
     # ZIP ENV
-    ZIPTIME: $(date +"%d%m%Y")
+    ZIPTIME: "$(date +'%d%m%Y')"
 
     # OUT ENV
     IMG: "/home/doraemon/msm-4.14/out/arch/arm64/boot/Image.gz-dtb"
