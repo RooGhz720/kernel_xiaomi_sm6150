@@ -1,0 +1,31 @@
+From d59fceb9d4b5aaf7306b4f81e61630827548bd33 Mon Sep 17 00:00:00 2001
+From: sweetyicecare <gabrielseedev@outlook.com>
+Date: Tue, 5 Jul 2022 16:54:44 +0530
+Subject: [PATCH] Revert "ARM64: dts: sweet: Decrease physical panel
+ dimensions"
+
+this revert d40c9784fc7857b20b064c713f1a734b38a42ff6
+
+Signed-off-by: sweetyicecare <gabrielseedev@outlook.com>
+---
+ .../xiaomi/sweet/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi     | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/xiaomi/sweet/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi b/arch/arm64/boot/dts/qcom/xiaomi/sweet/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
+index 3d0f1d519a79..c50034b24629 100644
+--- a/arch/arm64/boot/dts/qcom/xiaomi/sweet/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
++++ b/arch/arm64/boot/dts/qcom/xiaomi/sweet/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
+@@ -40,8 +40,8 @@
+ 		qcom,mdss-dsi-mdp-trigger = "none";
+ 		qcom,mdss-dsi-bl-dcs-type-ss-ea;
+ 		qcom,mdss-dsi-reset-sequence = <0 1>, <1 10>;
+-		qcom,mdss-pan-physical-width-dimension = <69>;
+-		qcom,mdss-pan-physical-height-dimension = <154>;
++		qcom,mdss-pan-physical-width-dimension = <695>;
++		qcom,mdss-pan-physical-height-dimension = <1546>;
+ 		qcom,mdss-dsi-tx-eot-append;
+ 		qcom,dispparam-enabled;
+ 		qcom,mdss-dsi-panel-hdr-enabled;
+-- 
+2.34.1
+

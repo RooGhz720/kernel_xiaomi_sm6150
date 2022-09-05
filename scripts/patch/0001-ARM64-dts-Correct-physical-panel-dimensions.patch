@@ -1,0 +1,28 @@
+From 299b237fba11fd8f0dd276cddbc6bc843c235f6e Mon Sep 17 00:00:00 2001
+From: Arian <arian.kulmer@web.de>
+Date: Tue, 2 Mar 2021 01:21:40 +0100
+Subject: [PATCH] ARM64: dts: Correct physical panel dimensions
+
+Change-Id: Ia99595bf038d8f9302e36e5a02aae48912243c96
+---
+ .../boot/dts/qcom/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi    | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi b/arch/arm64/boot/dts/qcom/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
+index c50034b24629..3d0f1d519a79 100644
+--- a/arch/arm64/boot/dts/qcom/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
++++ b/arch/arm64/boot/dts/qcom/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
+@@ -40,8 +40,8 @@
+ 		qcom,mdss-dsi-mdp-trigger = "none";
+ 		qcom,mdss-dsi-bl-dcs-type-ss-ea;
+ 		qcom,mdss-dsi-reset-sequence = <0 1>, <1 10>;
+-		qcom,mdss-pan-physical-width-dimension = <695>;
+-		qcom,mdss-pan-physical-height-dimension = <1546>;
++		qcom,mdss-pan-physical-width-dimension = <69>;
++		qcom,mdss-pan-physical-height-dimension = <154>;
+ 		qcom,mdss-dsi-tx-eot-append;
+ 		qcom,dispparam-enabled;
+ 		qcom,mdss-dsi-panel-hdr-enabled;
+-- 
+2.34.1
+

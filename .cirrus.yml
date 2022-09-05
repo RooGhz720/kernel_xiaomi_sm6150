@@ -1,0 +1,91 @@
+env:
+    # HOST ENV
+    CIRRUS_CLONE_DEPTH: 1
+    BUILD_HOSTNAME: "CirrusCI"
+    CIRRUS_WORKING_DIR: "/home/doraemon/"
+    CIRRUS_SHELL: bash
+
+    # KERNEL ENV
+    CROSS_COMPILE: "/home/doraemon/gcc64/bin/aarch64-linux-gnu-"
+    CROSS_COMPILE_ARM32: "/home/doraemon/gcc/bin/arm-linux-gnueabi-"
+    STRIP: "/home/doraemon/gcc64/aarch64-linux-gnu/bin/strip"
+    PATH: "/home/doraemon/clang/bin:${PATH}"
+    DTC_EXT: "dtc"
+    ARCH: "arm64"
+    SUBARCH: "arm64"
+    HEADER_ARCH: "arm64"
+    KBUILD_BUILD_HOST: "CurrusCI"
+    KBUILD_BUILD_USER: "dopaemon"
+
+    # OUT ENV
+    IMG: "/home/doraemon/msm-4.14/out/arch/arm64/boot/Image.gz-dtb"
+    DTBO: "/home/doraemon/msm-4.14/out/arch/arm64/boot/dtbo.img"
+    DTB: "/home/doraemon/msm-4.14/out/arch/arm64/boot/dtb.img"
+
+    # RCLONE ENV
+    RCLONE: "ENCRYPTED[0463ada215cfdf15ce201c6f95760ac57f05da79f7d6c632ed935a24da85c111b4c72fc02ddf39440b8ea435790dd302]"
+    TOKEN: "ENCRYPTED[fcd26db76fbb903484d3d4edfb6e67cb43b2438adaaa2cbbd20a25ec4356b8bcf68d01ef10d4827a2c95af346dbbe846]"
+
+task:
+  name: Compile Kernel Xiaomi Redmi Note 10 Pro
+  only_if: $CIRRUS_REPO_OWNER == 'dopaemon' && $CIRRUS_BRANCH == 'android'
+  skip: $CIRRUS_BRANCH != 'android'
+  container:
+    image: dopaemon/focal:latest
+    cpu: 4
+    memory: 8G
+
+  clone_script:
+    - git clone -j$(nproc --all) --depth=1 https://github.com/dopaemon/msm-4.14.git ~/msm-4.14 -b android --single-branch
+    - git clone -j$(nproc --all) --depth=1 https://github.com/radcolor/aarch64-linux-gnu.git ~/gcc64 -b master --single-branch
+    - git clone -j$(nproc --all) --depth=1 https://github.com/radcolor/arm-linux-gnueabi.git ~/gcc -b master --single-branch
+    - git clone -j$(nproc --all) --depth=1 https://github.com/kdrag0n/proton-clang.git ~/clang -b master --single-branch
+
+  setup_script:
+    - sudo apt-get update
+    - sudo -E apt-get -qq install $RCLONE git make bc bison openssl curl zip kmod cpio flex libelf-dev libssl-dev libtfm-dev wget device-tree-compiler ca-certificates python3 python2 binutils binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+    - wget -O ~/zipsigner-3.0.jar https://raw.githubusercontent.com/shashank1439/anykernel/zipper/zipsigner-3.0.jar
+    - chmod +x ~/zipsigner-3.0.jar
+    - mkdir -p ~/.config/$RCLONE
+    - echo "$TOKEN" > ~/.config/$RCLONE/$RCLONE.conf
+
+  compile_oss_script:
+    - cd ~/msm-4.14
+    - make O=out clean
+    - make O=out mrproper
+    - make O=out sweet-perf_defconfig
+    - make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 AR=llvm-ar NM=llvm-nm LD=ld.lld OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1 | tee error.log
+    - rm -rf ~/Anykernel3
+    - git clone -b Anykernel3 --single-branch https://github.com/dopaemon/msm-4.14.git ~/Anykernel3 --single-branch --depth="1"
+    - cp -r $IMG ~/Anykernel3/
+    - cp -r $DTBO ~/Anykernel3/
+    - cp -r $DTB ~/Anykernel3/
+    - cd ~/Anykernel3/
+    - zip -rv9 Doraemon-Kernel-$(date +"%d%m%Y")-OSS-n10p.zip *
+    - mv ~/Anykernel3/Doraemon-Kernel-$(date +"%d%m%Y")-OSS-n10p.zip ~/
+
+  compile_miui_script:
+    - cd ~/msm-4.14
+    - make O=out clean
+    - make O=out mrproper
+    - make O=out sweet-perf_defconfig
+    - git am < scripts/patch/0001-Revert-ARM64-dts-sweet-Decrease-physical-panel-dimen.patch
+    - make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 AR=llvm-ar NM=llvm-nm LD=ld.lld OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1 | tee error.log
+    - rm -rf ~/Anykernel3
+    - git clone -b Anykernel3 --single-branch https://github.com/dopaemon/msm-4.14.git ~/Anykernel3 --single-branch --depth="1"
+    - cp -r $IMG ~/Anykernel3/
+    - cp -r $DTBO ~/Anykernel3/
+    - cp -r $DTB ~/Anykernel3/
+    - cd ~/Anykernel3/
+    - zip -rv9 Doraemon-Kernel-$(date +"%d%m%Y")-Miui-n10p.zip *
+    - mv ~/Anykernel3/Doraemon-Kernel-$(date +"%d%m%Y")-Miui-n10p.zip ~/
+
+  signer_script:
+    - java -jar zipsigner-3.0.jar Doraemon-Kernel-$(date +"%d%m%Y")-OSS-n10p.zip Doraemon-Kernel-$(date +"%d%m%Y")-OSS-n10p-signed.zip
+    - java -jar zipsigner-3.0.jar Doraemon-Kernel-$(date +"%d%m%Y")-Miui-n10p.zip Doraemon-Kernel-$(date +"%d%m%Y")-Miui-n10p-signed.zip
+    - ls
+
+  upload_script:
+    - cd ~/
+    - $RCLONE copy -v Doraemon-Kernel-$(date +"%d%m%Y")-OSS-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/$(date +"%d%m%Y")/
+    - $RCLONE copy -v Doraemon-Kernel-$(date +"%d%m%Y")-Miui-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/$(date +"%d%m%Y")/
