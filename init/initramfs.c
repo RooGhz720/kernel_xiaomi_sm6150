@@ -614,7 +614,15 @@ static int __init skip_initramfs_param(char *str)
 {
 	if (*str)
 		return 0;
+
+        #ifdef CONFIG_ANDROID_KERNEL
 	do_skip_initramfs = 1;
+        #endif
+
+        #ifdef CONFIG_HALIUM_KERNEL
+        do_skip_initramfs = 0;
+        #endif
+
 	return 1;
 }
 __setup("skip_initramfs", skip_initramfs_param);
