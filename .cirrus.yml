@@ -28,15 +28,15 @@ env:
 
 task:
   name: Compile Kernel Xiaomi Redmi Note 10 Pro
-  only_if: $CIRRUS_REPO_OWNER == 'dopaemon' && $CIRRUS_BRANCH == 'android'
-  skip: $CIRRUS_BRANCH != 'android'
+  only_if: $CIRRUS_REPO_OWNER == 'dopaemon' && $CIRRUS_BRANCH == 'sweet'
+  skip: $CIRRUS_BRANCH != 'sweet'
   container:
     image: dopaemon/focal:latest
     cpu: 4
     memory: 8G
 
   clone_script:
-    - git clone -j$(nproc --all) --depth=1 https://github.com/dopaemon/msm-4.14.git ~/msm-4.14 -b android --single-branch
+    - git clone -j$(nproc --all) --depth=1 https://github.com/dopaemon/msm-4.14.git ~/msm-4.14 -b sweet --single-branch
     - git clone -j$(nproc --all) --depth=1 https://github.com/radcolor/aarch64-linux-gnu.git ~/gcc64 -b master --single-branch
     - git clone -j$(nproc --all) --depth=1 https://github.com/radcolor/arm-linux-gnueabi.git ~/gcc -b master --single-branch
     - git clone -j$(nproc --all) --depth=1 https://github.com/kdrag0n/proton-clang.git ~/clang -b master --single-branch
