@@ -88,5 +88,5 @@ task:
 
   upload_script:
     - cd ~/
-    - $RCLONE copy -v Doraemon-Kernel-Latest-OSS-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/
-    - $RCLONE copy -v Doraemon-Kernel-Latest-Miui-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/
+    - $RCLONE copy -v Doraemon-Kernel-Latest-OSS-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/ || $RCLONE copy -v Doraemon-Kernel-Latest-OSS-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/
+    - $RCLONE copy -v Doraemon-Kernel-Latest-Miui-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/ || $RCLONE copy -v Doraemon-Kernel-Latest-OSS-n10p-signed.zip cirrus:Doraemon-Kernel/sweet/Latest/
