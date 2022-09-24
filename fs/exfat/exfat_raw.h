@@ -14,8 +14,9 @@
 
 #define EXFAT_MAX_FILE_LEN	255
 
-#define VOLUME_DIRTY		0x0002
-#define MEDIA_FAILURE		0x0004
+#define VOL_CLEAN		0x0000
+#define VOL_DIRTY		0x0002
+#define ERR_MEDIUM		0x0004
 
 #define EXFAT_EOF_CLUSTER	0xFFFFFFFFu
 #define EXFAT_BAD_CLUSTER	0xFFFFFFF7u
@@ -76,10 +77,6 @@
 #define BOOTSEC_OLDBPB_LEN		53
 
 #define EXFAT_FILE_NAME_LEN		15
-
-#define EXFAT_MIN_SECT_SIZE_BITS		9
-#define EXFAT_MAX_SECT_SIZE_BITS		12
-#define EXFAT_MAX_SECT_PER_CLUS_BITS(x)		(25 - (x)->sect_size_bits)
 
 /* EXFAT: Main and Backup Boot Sector (512 bytes) */
 struct boot_sector {
