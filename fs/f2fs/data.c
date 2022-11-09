@@ -952,10 +952,6 @@ int f2fs_merge_page_bio(struct f2fs_io_info *fio)
 
 	trace_f2fs_submit_page_bio(page, fio);
 
-	if (bio && !page_is_mergeable(fio->sbi, bio, *fio->last_block,
-				       fio->new_blkaddr))
-		f2fs_submit_merged_ipu_write(fio->sbi, &bio, NULL);
-
 alloc_new:
 	if (!bio) {
 		bio = __bio_alloc(fio, BIO_MAX_PAGES);

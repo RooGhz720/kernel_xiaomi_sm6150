@@ -4,7 +4,6 @@
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd.
  *             http://www.samsung.com/
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 #include <linux/fs.h>
 #include <linux/f2fs_fs.h>
@@ -1911,13 +1910,9 @@ continue_unlock:
 				goto continue_unlock;
 			}
 
-			/* flush inline_data/inode, if it's async context. */
-			if (!do_balance)
-				goto write_node;
-
-			/* flush inline_data */
-			if (is_inline_node(page)) {
-				clear_inline_node(page);
+			/* flush inline_data, if it's async context. */
+			if (page_private_inline(page)) {
+				clear_page_private_inline(page);
 				unlock_page(page);
 				flush_inline_data(sbi, ino_of_node(page));
 				continue;
@@ -1991,12 +1986,8 @@ continue_unlock:
 				goto continue_unlock;
 			}
 
-			/* flush inline_data/inode, if it's async context. */
-			if (!do_balance)
-				goto write_node;
-
-			/* flush inline_data */
-			if (page_private_inline(page)) {
+			/* flush inline_data, if it's async context. */
+			if (do_balance && page_private_inline(page)) {
 				clear_page_private_inline(page);
 				unlock_page(page);
 				flush_inline_data(sbi, ino_of_node(page));
@@ -2006,7 +1997,6 @@ continue_unlock:
 			/* flush dirty inode */
 			if (IS_INODE(page) && flush_dirty_inode(page))
 				goto lock_node;
-write_node:
 			f2fs_wait_on_page_writeback(page, NODE, true, true);
 
 			if (!clear_page_dirty_for_io(page))
