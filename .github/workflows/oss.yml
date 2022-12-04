@@ -20,12 +20,9 @@ jobs:
           binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
     - name: kompile krunulll....
       run: |
-          git config --global user.name "RooGhz720"
-          git config --global user.email "RooGhz720@gmail.com"
-          git revert 87b02344b6ffb053fdaadee8b5649d9377b9d47e --no-edit
-          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/oss.sh > oss.sh
-          chmod +x oss.sh
-          bash oss.sh
+          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/.oss.sh > .oss.sh
+          chmod +x .oss.sh
+          bash .oss.sh
       shell: bash
       env:
          CHATID: ${{ secrets.CHAT_ID }}
