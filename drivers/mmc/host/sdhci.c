@@ -13,7 +13,6 @@
  *     - JMicron (hardware and technical support)
  */
 
-#include <linux/bitfield.h>
 #include <linux/delay.h>
 #include <linux/ktime.h>
 #include <linux/highmem.h>
@@ -35,8 +34,11 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/slot-gpio.h>
+#include <linux/mmc/sdio.h>
+#include <trace/events/mmc.h>
 
 #include "sdhci.h"
+#include "cmdq_hci.h"
 
 #define DRIVER_NAME "sdhci"
 
@@ -48,50 +50,85 @@
 
 #define MAX_TUNING_LOOP 40
 
+#define SDHCI_DBG_DUMP_RS_INTERVAL (10 * HZ)
+#define SDHCI_DBG_DUMP_RS_BURST 2
+
 static unsigned int debug_quirks = 0;
 static unsigned int debug_quirks2;
 
 static void sdhci_finish_data(struct sdhci_host *);
-
+static bool sdhci_check_state(struct sdhci_host *);
+static void sdhci_enable_sdio_irq_nolock(struct sdhci_host *host, int enable);
 static void sdhci_enable_preset_value(struct sdhci_host *host, bool enable);
+
+static void sdhci_dump_state(struct sdhci_host *host)
+{
+	struct mmc_host *mmc = host->mmc;
+
+	#ifdef CONFIG_MMC_CLKGATE
+	pr_info("%s: clk: %d clk-gated: %d claimer: %s pwr: %d host->irq = %d\n",
+		mmc_hostname(mmc), host->clock, mmc->clk_gated,
+		mmc->claimer->comm, host->pwr,
+		(host->flags & SDHCI_HOST_IRQ_STATUS));
+	#else
+	pr_info("%s: clk: %d claimer: %s pwr: %d\n",
+		mmc_hostname(mmc), host->clock,
+		mmc->claimer->comm, host->pwr);
+	#endif
+	pr_info("%s: rpmstatus[pltfm](runtime-suspend:usage_count:disable_depth)(%d:%d:%d)\n",
+	mmc_hostname(mmc), mmc->parent->power.runtime_status,
+		atomic_read(&mmc->parent->power.usage_count),
+		mmc->parent->power.disable_depth);
+}
 
 void sdhci_dumpregs(struct sdhci_host *host)
 {
+	MMC_TRACE(host->mmc,
+		"%s: 0x04=0x%08x 0x06=0x%08x 0x0E=0x%08x 0x30=0x%08x 0x34=0x%08x 0x38=0x%08x\n",
+		__func__,
+		sdhci_readw(host, SDHCI_BLOCK_SIZE),
+		sdhci_readw(host, SDHCI_BLOCK_COUNT),
+		sdhci_readw(host, SDHCI_COMMAND),
+		sdhci_readl(host, SDHCI_INT_STATUS),
+		sdhci_readl(host, SDHCI_INT_ENABLE),
+		sdhci_readl(host, SDHCI_SIGNAL_ENABLE));
+	mmc_stop_tracing(host->mmc);
+
 	SDHCI_DUMP("============ SDHCI REGISTER DUMP ===========\n");
 
 	SDHCI_DUMP("Sys addr:  0x%08x | Version:  0x%08x\n",
-		   sdhci_readl(host, SDHCI_DMA_ADDRESS),
-		   sdhci_readw(host, SDHCI_HOST_VERSION));
+	       sdhci_readl(host, SDHCI_DMA_ADDRESS),
+	       sdhci_readw(host, SDHCI_HOST_VERSION));
 	SDHCI_DUMP("Blk size:  0x%08x | Blk cnt:  0x%08x\n",
-		   sdhci_readw(host, SDHCI_BLOCK_SIZE),
-		   sdhci_readw(host, SDHCI_BLOCK_COUNT));
+	       sdhci_readw(host, SDHCI_BLOCK_SIZE),
+	       sdhci_readw(host, SDHCI_BLOCK_COUNT));
 	SDHCI_DUMP("Argument:  0x%08x | Trn mode: 0x%08x\n",
-		   sdhci_readl(host, SDHCI_ARGUMENT),
-		   sdhci_readw(host, SDHCI_TRANSFER_MODE));
+	       sdhci_readl(host, SDHCI_ARGUMENT),
+	       sdhci_readw(host, SDHCI_TRANSFER_MODE));
 	SDHCI_DUMP("Present:   0x%08x | Host ctl: 0x%08x\n",
-		   sdhci_readl(host, SDHCI_PRESENT_STATE),
-		   sdhci_readb(host, SDHCI_HOST_CONTROL));
+	       sdhci_readl(host, SDHCI_PRESENT_STATE),
+	       sdhci_readb(host, SDHCI_HOST_CONTROL));
 	SDHCI_DUMP("Power:     0x%08x | Blk gap:  0x%08x\n",
-		   sdhci_readb(host, SDHCI_POWER_CONTROL),
-		   sdhci_readb(host, SDHCI_BLOCK_GAP_CONTROL));
+	       sdhci_readb(host, SDHCI_POWER_CONTROL),
+	       sdhci_readb(host, SDHCI_BLOCK_GAP_CONTROL));
 	SDHCI_DUMP("Wake-up:   0x%08x | Clock:    0x%08x\n",
-		   sdhci_readb(host, SDHCI_WAKE_UP_CONTROL),
-		   sdhci_readw(host, SDHCI_CLOCK_CONTROL));
+	       sdhci_readb(host, SDHCI_WAKE_UP_CONTROL),
+	       sdhci_readw(host, SDHCI_CLOCK_CONTROL));
 	SDHCI_DUMP("Timeout:   0x%08x | Int stat: 0x%08x\n",
-		   sdhci_readb(host, SDHCI_TIMEOUT_CONTROL),
-		   sdhci_readl(host, SDHCI_INT_STATUS));
+	       sdhci_readb(host, SDHCI_TIMEOUT_CONTROL),
+	       sdhci_readl(host, SDHCI_INT_STATUS));
 	SDHCI_DUMP("Int enab:  0x%08x | Sig enab: 0x%08x\n",
-		   sdhci_readl(host, SDHCI_INT_ENABLE),
-		   sdhci_readl(host, SDHCI_SIGNAL_ENABLE));
+	       sdhci_readl(host, SDHCI_INT_ENABLE),
+	       sdhci_readl(host, SDHCI_SIGNAL_ENABLE));
 	SDHCI_DUMP("ACmd stat: 0x%08x | Slot int: 0x%08x\n",
 		   sdhci_readw(host, SDHCI_AUTO_CMD_STATUS),
 		   sdhci_readw(host, SDHCI_SLOT_INT_STATUS));
 	SDHCI_DUMP("Caps:      0x%08x | Caps_1:   0x%08x\n",
-		   sdhci_readl(host, SDHCI_CAPABILITIES),
-		   sdhci_readl(host, SDHCI_CAPABILITIES_1));
+	       sdhci_readl(host, SDHCI_CAPABILITIES),
+	       sdhci_readl(host, SDHCI_CAPABILITIES_1));
 	SDHCI_DUMP("Cmd:       0x%08x | Max curr: 0x%08x\n",
-		   sdhci_readw(host, SDHCI_COMMAND),
-		   sdhci_readl(host, SDHCI_MAX_CURRENT));
+	       sdhci_readw(host, SDHCI_COMMAND),
+	       sdhci_readl(host, SDHCI_MAX_CURRENT));
 	SDHCI_DUMP("Resp[0]:   0x%08x | Resp[1]:  0x%08x\n",
 		   sdhci_readl(host, SDHCI_RESPONSE),
 		   sdhci_readl(host, SDHCI_RESPONSE + 4));
@@ -99,7 +136,7 @@ void sdhci_dumpregs(struct sdhci_host *host)
 		   sdhci_readl(host, SDHCI_RESPONSE + 8),
 		   sdhci_readl(host, SDHCI_RESPONSE + 12));
 	SDHCI_DUMP("Host ctl2: 0x%08x\n",
-		   sdhci_readw(host, SDHCI_HOST_CONTROL2));
+	       sdhci_readw(host, SDHCI_HOST_CONTROL2));
 
 	if (host->flags & SDHCI_USE_ADMA) {
 		if (host->flags & SDHCI_USE_64_BIT_DMA) {
@@ -114,7 +151,16 @@ void sdhci_dumpregs(struct sdhci_host *host)
 		}
 	}
 
+	host->mmc->err_occurred = true;
+	host->mmc->last_failed_rq_time = ktime_get();
+
+	if (host->ops->dump_vendor_regs)
+		host->ops->dump_vendor_regs(host);
+	sdhci_dump_state(host);
 	SDHCI_DUMP("============================================\n");
+	/* crash the system upon setting this debugfs. */
+	if (host->mmc->crash_on_err)
+		BUG_ON(1);
 }
 EXPORT_SYMBOL_GPL(sdhci_dumpregs);
 
@@ -181,6 +227,7 @@ void sdhci_reset(struct sdhci_host *host, u8 mask)
 {
 	ktime_t timeout;
 
+retry_reset:
 	sdhci_writeb(host, mask, SDHCI_SOFTWARE_RESET);
 
 	if (mask & SDHCI_RESET_ALL) {
@@ -193,6 +240,14 @@ void sdhci_reset(struct sdhci_host *host, u8 mask)
 	/* Wait max 100 ms */
 	timeout = ktime_add_ms(ktime_get(), 100);
 
+	if (host->ops->check_power_status && host->pwr &&
+	    (mask & SDHCI_RESET_ALL))
+		host->ops->check_power_status(host, REQ_BUS_OFF);
+
+	/* clear pending normal/error interrupt status */
+	sdhci_writel(host, sdhci_readl(host, SDHCI_INT_STATUS),
+			SDHCI_INT_STATUS);
+
 	/* hw clears the bit when it's done */
 	while (1) {
 		bool timedout = ktime_after(ktime_get(), timeout);
@@ -202,10 +257,42 @@ void sdhci_reset(struct sdhci_host *host, u8 mask)
 		if (timedout) {
 			pr_err("%s: Reset 0x%x never completed.\n",
 				mmc_hostname(host->mmc), (int)mask);
+			MMC_TRACE(host->mmc, "%s: Reset 0x%x never completed\n",
+					__func__, (int)mask);
+			if ((host->quirks2 & SDHCI_QUIRK2_USE_RESET_WORKAROUND)
+				&& host->ops->reset_workaround) {
+				if (!host->reset_wa_applied) {
+					/*
+					 * apply the workaround and issue
+					 * reset again.
+					 */
+					host->ops->reset_workaround(host, 1);
+					host->reset_wa_applied = 1;
+					host->reset_wa_cnt++;
+					goto retry_reset;
+				} else {
+					pr_err("%s: Reset 0x%x failed with workaround\n",
+						mmc_hostname(host->mmc),
+						(int)mask);
+					/* clear the workaround */
+					host->ops->reset_workaround(host, 0);
+					host->reset_wa_applied = 0;
+				}
+			}
+
 			sdhci_dumpregs(host);
 			return;
 		}
 		udelay(10);
+	}
+
+	if ((host->quirks2 & SDHCI_QUIRK2_USE_RESET_WORKAROUND) &&
+			host->ops->reset_workaround && host->reset_wa_applied) {
+		pr_info("%s: Reset 0x%x successful with workaround\n",
+				mmc_hostname(host->mmc), (int)mask);
+		/* clear the workaround */
+		host->ops->reset_workaround(host, 0);
+		host->reset_wa_applied = 0;
 	}
 }
 EXPORT_SYMBOL_GPL(sdhci_reset);
@@ -238,7 +325,7 @@ static void sdhci_set_default_irqs(struct sdhci_host *host)
 		    SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT |
 		    SDHCI_INT_INDEX | SDHCI_INT_END_BIT | SDHCI_INT_CRC |
 		    SDHCI_INT_TIMEOUT | SDHCI_INT_DATA_END |
-		    SDHCI_INT_RESPONSE;
+		    SDHCI_INT_RESPONSE | SDHCI_INT_AUTO_CMD_ERR;
 
 	if (host->tuning_mode == SDHCI_TUNING_MODE_2 ||
 	    host->tuning_mode == SDHCI_TUNING_MODE_3)
@@ -264,7 +351,6 @@ static void sdhci_init(struct sdhci_host *host, int soft)
 	if (soft) {
 		/* force clock reconfiguration */
 		host->clock = 0;
-		host->reinit_uhs = true;
 		mmc->ops->set_ios(mmc, &mmc->ios);
 	}
 }
@@ -300,9 +386,12 @@ static void sdhci_led_control(struct led_classdev *led,
 	struct sdhci_host *host = container_of(led, struct sdhci_host, led);
 	unsigned long flags;
 
+	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
+		return;
+
 	spin_lock_irqsave(&host->lock, flags);
 
-	if (host->runtime_suspended)
+	if (host->runtime_suspended || sdhci_check_state(host))
 		goto out;
 
 	if (brightness == LED_OFF)
@@ -674,6 +763,9 @@ static void sdhci_adma_table_post(struct sdhci_host *host,
 	void *align;
 	char *buffer;
 	unsigned long flags;
+	u32 command = SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND));
+
+	trace_mmc_adma_table_post(command, data->sg_len);
 
 	if (data->flags & MMC_DATA_READ) {
 		bool has_unaligned = false;
@@ -720,6 +812,7 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	u8 count;
 	struct mmc_data *data = cmd->data;
 	unsigned target_timeout, current_timeout;
+	u32 curr_clk = 0; /* In KHz */
 
 	/*
 	 * If the host controller provides us with an incorrect timeout
@@ -765,7 +858,14 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	 *     (1) / (2) > 2^6
 	 */
 	count = 0;
-	current_timeout = (1 << 13) * 1000 / host->timeout_clk;
+	if (host->quirks2 & SDHCI_QUIRK2_ALWAYS_USE_BASE_CLOCK) {
+		curr_clk = host->clock / 1000;
+		if (host->quirks2 & SDHCI_QUIRK2_DIVIDE_TOUT_BY_4)
+			curr_clk /= 4;
+		current_timeout = (1 << 13) * 1000 / curr_clk;
+	} else {
+		current_timeout = (1 << 13) * 1000 / host->timeout_clk;
+	}
 	while (current_timeout < target_timeout) {
 		count++;
 		current_timeout <<= 1;
@@ -773,10 +873,12 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 			break;
 	}
 
-	if (count >= 0xF) {
-		DBG("Too large timeout 0x%x requested for CMD%d!\n",
-		    count, cmd->opcode);
-		count = 0xE;
+	if (!(host->quirks2 & SDHCI_QUIRK2_USE_RESERVED_MAX_TIMEOUT)) {
+		if (count >= 0xF) {
+			DBG("Too large timeout 0x%x requested for CMD%d!\n",
+				count, cmd->opcode);
+				count = 0xE;
+		}
 	}
 
 	return count;
@@ -813,6 +915,17 @@ static void sdhci_set_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	}
 }
 
+static void sdhci_set_blk_size_reg(struct sdhci_host *host, unsigned int blksz,
+				   unsigned int sdma_boundary)
+{
+	if (host->flags & SDHCI_USE_ADMA)
+		sdhci_writew(host, SDHCI_MAKE_BLKSZ(0, blksz),
+			     SDHCI_BLOCK_SIZE);
+	else
+		sdhci_writew(host, SDHCI_MAKE_BLKSZ(sdma_boundary, blksz),
+			     SDHCI_BLOCK_SIZE);
+}
+
 static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
 {
 	u8 ctrl;
@@ -827,7 +940,7 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
 	WARN_ON(host->data);
 
 	/* Sanity checks */
-	BUG_ON(data->blksz * data->blocks > 524288);
+	BUG_ON(data->blksz * data->blocks > host->mmc->max_req_size);
 	BUG_ON(data->blksz > host->mmc->max_blk_size);
 	BUG_ON(data->blocks > 65535);
 
@@ -841,6 +954,10 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
 		int i;
 
 		host->flags |= SDHCI_REQ_USE_DMA;
+
+		if ((host->quirks2 & SDHCI_QUIRK2_USE_PIO_FOR_EMMC_TUNING) &&
+			cmd->opcode == MMC_SEND_TUNING_BLOCK_HS200)
+			host->flags &= ~SDHCI_REQ_USE_DMA;
 
 		/*
 		 * FIXME: This doesn't account for merging when mapping the
@@ -896,6 +1013,7 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
 			WARN_ON(1);
 			host->flags &= ~SDHCI_REQ_USE_DMA;
 		} else if (host->flags & SDHCI_USE_ADMA) {
+			trace_mmc_adma_table_pre(cmd->opcode, data->sg_len);
 			sdhci_adma_table_pre(host, data, sg_cnt);
 
 			sdhci_writel(host, host->adma_addr, SDHCI_ADMA_ADDRESS);
@@ -943,11 +1061,14 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
 	}
 
 	sdhci_set_transfer_irqs(host);
-
 	/* Set the DMA boundary value and block size */
-	sdhci_writew(host, SDHCI_MAKE_BLKSZ(host->sdma_boundary, data->blksz),
-		     SDHCI_BLOCK_SIZE);
+	sdhci_set_blk_size_reg(host, data->blksz, SDHCI_DEFAULT_BOUNDARY_ARG);
 	sdhci_writew(host, data->blocks, SDHCI_BLOCK_COUNT);
+	MMC_TRACE(host->mmc,
+		"%s: 0x28=0x%08x 0x3E=0x%08x 0x06=0x%08x\n", __func__,
+		sdhci_readb(host, SDHCI_HOST_CONTROL),
+		sdhci_readw(host, SDHCI_HOST_CONTROL2),
+		sdhci_readw(host, SDHCI_BLOCK_COUNT));
 }
 
 static inline bool sdhci_auto_cmd12(struct sdhci_host *host,
@@ -996,12 +1117,26 @@ static void sdhci_set_transfer_mode(struct sdhci_host *host,
 		}
 	}
 
-	if (data->flags & MMC_DATA_READ)
+	if (data->flags & MMC_DATA_READ) {
 		mode |= SDHCI_TRNS_READ;
+		if (host->ops->toggle_cdr) {
+			if ((cmd->opcode == MMC_SEND_TUNING_BLOCK_HS200) ||
+				(cmd->opcode == MMC_SEND_TUNING_BLOCK_HS400) ||
+				(cmd->opcode == MMC_SEND_TUNING_BLOCK))
+				host->ops->toggle_cdr(host, false);
+			else
+				host->ops->toggle_cdr(host, true);
+		}
+	}
+	if (host->ops->toggle_cdr && (data->flags & MMC_DATA_WRITE))
+		host->ops->toggle_cdr(host, false);
 	if (host->flags & SDHCI_REQ_USE_DMA)
 		mode |= SDHCI_TRNS_DMA;
 
 	sdhci_writew(host, mode, SDHCI_TRANSFER_MODE);
+	MMC_TRACE(host->mmc, "%s: 0x00=0x%08x 0x0C=0x%08x\n", __func__,
+		sdhci_readw(host, SDHCI_ARGUMENT2),
+		sdhci_readw(host, SDHCI_TRANSFER_MODE));
 }
 
 static bool sdhci_needs_reset(struct sdhci_host *host, struct mmc_request *mrq)
@@ -1033,7 +1168,7 @@ static void __sdhci_finish_mrq(struct sdhci_host *host, struct mmc_request *mrq)
 
 	WARN_ON(i >= SDHCI_MAX_MRQS);
 
-	tasklet_schedule(&host->finish_tasklet);
+	tasklet_hi_schedule(&host->finish_tasklet);
 }
 
 static void sdhci_finish_mrq(struct sdhci_host *host, struct mmc_request *mrq)
@@ -1145,7 +1280,7 @@ void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		cmd->flags |= MMC_RSP_BUSY;
 
 	/* Wait max 10 ms */
-	timeout = 10;
+	timeout = 10000;
 
 	mask = SDHCI_CMD_INHIBIT;
 	if (sdhci_data_line_cmd(cmd))
@@ -1160,13 +1295,16 @@ void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		if (timeout == 0) {
 			pr_err("%s: Controller never released inhibit bit(s).\n",
 			       mmc_hostname(host->mmc));
+			MMC_TRACE(host->mmc,
+			"%s :Controller never released inhibit bit(s)\n",
+			__func__);
 			sdhci_dumpregs(host);
 			cmd->error = -EIO;
 			sdhci_finish_mrq(host, cmd->mrq);
 			return;
 		}
 		timeout--;
-		mdelay(1);
+		udelay(1);
 	}
 
 	timeout = jiffies;
@@ -1215,7 +1353,15 @@ void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 	    cmd->opcode == MMC_SEND_TUNING_BLOCK_HS200)
 		flags |= SDHCI_CMD_DATA;
 
+	if (cmd->data)
+		host->data_start_time = ktime_get();
+	trace_mmc_cmd_rw_start(cmd->opcode, cmd->arg, cmd->flags);
 	sdhci_writew(host, SDHCI_MAKE_CMD(cmd->opcode, flags), SDHCI_COMMAND);
+	MMC_TRACE(host->mmc,
+		"%s: updated 0x8=0x%08x 0xC=0x%08x 0xE=0x%08x\n", __func__,
+		sdhci_readl(host, SDHCI_ARGUMENT),
+		sdhci_readw(host, SDHCI_TRANSFER_MODE),
+		sdhci_readw(host, SDHCI_COMMAND));
 }
 EXPORT_SYMBOL_GPL(sdhci_send_command);
 
@@ -1248,8 +1394,14 @@ static void sdhci_finish_command(struct sdhci_host *host)
 	if (cmd->flags & MMC_RSP_PRESENT) {
 		if (cmd->flags & MMC_RSP_136) {
 			sdhci_read_rsp_136(host, cmd);
+			MMC_TRACE(host->mmc,
+			"%s: resp 0: 0x%08x resp 1: 0x%08x resp 2: 0x%08x resp 3: 0x%08x\n",
+			__func__, cmd->resp[0], cmd->resp[1],
+			cmd->resp[2], cmd->resp[3]);
 		} else {
 			cmd->resp[0] = sdhci_readl(host, SDHCI_RESPONSE);
+			MMC_TRACE(host->mmc, "%s: resp 0: 0x%08x\n",
+				__func__, cmd->resp[0]);
 		}
 	}
 
@@ -1342,9 +1494,10 @@ u16 sdhci_calc_clk(struct sdhci_host *host, unsigned int clock,
 
 			clk = sdhci_readw(host, SDHCI_CLOCK_CONTROL);
 			pre_val = sdhci_get_preset_value(host);
-			div = FIELD_GET(SDHCI_PRESET_SDCLK_FREQ_MASK, pre_val);
+			div = (pre_val & SDHCI_PRESET_SDCLK_FREQ_MASK)
+				>> SDHCI_PRESET_SDCLK_FREQ_SHIFT;
 			if (host->clk_mul &&
-				(pre_val & SDHCI_PRESET_CLKGEN_SEL)) {
+				(pre_val & SDHCI_PRESET_CLKGEN_SEL_MASK)) {
 				clk = SDHCI_PROG_CLOCK_MODE;
 				real_div = div + 1;
 				clk_mul = host->clk_mul;
@@ -1412,6 +1565,10 @@ u16 sdhci_calc_clk(struct sdhci_host *host, unsigned int clock,
 clock_set:
 	if (real_div)
 		*actual_clock = (host->max_clk * clk_mul) / real_div;
+
+	if (host->quirks2 & SDHCI_QUIRK2_ALWAYS_USE_BASE_CLOCK)
+		div = 0;
+
 	clk |= (div & SDHCI_DIV_MASK) << SDHCI_DIVIDER_SHIFT;
 	clk |= ((div & SDHCI_DIV_HI_MASK) >> SDHCI_DIV_MASK_LEN)
 		<< SDHCI_DIVIDER_HI_SHIFT;
@@ -1438,6 +1595,8 @@ void sdhci_enable_clk(struct sdhci_host *host, u16 clk)
 		if (timedout) {
 			pr_err("%s: Internal clock never stabilised.\n",
 			       mmc_hostname(host->mmc));
+			MMC_TRACE(host->mmc,
+			"%s: Internal clock never stabilised.\n", __func__);
 			sdhci_dumpregs(host);
 			return;
 		}
@@ -1455,7 +1614,8 @@ void sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 
 	host->mmc->actual_clock = 0;
 
-	sdhci_writew(host, 0, SDHCI_CLOCK_CONTROL);
+	if (host->clock)
+		sdhci_writew(host, 0, SDHCI_CLOCK_CONTROL);
 
 	if (clock == 0)
 		return;
@@ -1523,6 +1683,8 @@ void sdhci_set_power_noreg(struct sdhci_host *host, unsigned char mode,
 
 	if (pwr == 0) {
 		sdhci_writeb(host, 0, SDHCI_POWER_CONTROL);
+		if (host->ops->check_power_status)
+			host->ops->check_power_status(host, REQ_BUS_OFF);
 		if (host->quirks2 & SDHCI_QUIRK2_CARD_ON_NEEDS_BUS_ON)
 			sdhci_runtime_pm_bus_off(host);
 	} else {
@@ -1530,20 +1692,29 @@ void sdhci_set_power_noreg(struct sdhci_host *host, unsigned char mode,
 		 * Spec says that we should clear the power reg before setting
 		 * a new value. Some controllers don't seem to like this though.
 		 */
-		if (!(host->quirks & SDHCI_QUIRK_SINGLE_POWER_WRITE))
+		if (!(host->quirks & SDHCI_QUIRK_SINGLE_POWER_WRITE)) {
 			sdhci_writeb(host, 0, SDHCI_POWER_CONTROL);
-
+			if (host->ops->check_power_status)
+				host->ops->check_power_status(host,
+					REQ_BUS_OFF);
+		}
 		/*
 		 * At least the Marvell CaFe chip gets confused if we set the
 		 * voltage and set turn on power at the same time, so set the
 		 * voltage first.
 		 */
-		if (host->quirks & SDHCI_QUIRK_NO_SIMULT_VDD_AND_POWER)
+		if (host->quirks & SDHCI_QUIRK_NO_SIMULT_VDD_AND_POWER) {
 			sdhci_writeb(host, pwr, SDHCI_POWER_CONTROL);
+			if (host->ops->check_power_status)
+				host->ops->check_power_status(host,
+					REQ_BUS_ON);
+		}
 
 		pwr |= SDHCI_POWER_ON;
 
 		sdhci_writeb(host, pwr, SDHCI_POWER_CONTROL);
+		if (host->ops->check_power_status)
+			host->ops->check_power_status(host, REQ_BUS_ON);
 
 		if (host->quirks2 & SDHCI_QUIRK2_CARD_ON_NEEDS_BUS_ON)
 			sdhci_runtime_pm_bus_on(host);
@@ -1574,6 +1745,105 @@ EXPORT_SYMBOL_GPL(sdhci_set_power);
  *                                                                           *
 \*****************************************************************************/
 
+static int sdhci_enable(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (host->ops->platform_bus_voting)
+		host->ops->platform_bus_voting(host, 1);
+
+	return 0;
+}
+
+static int sdhci_disable(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (host->ops->platform_bus_voting)
+		host->ops->platform_bus_voting(host, 0);
+
+	return 0;
+}
+
+static void sdhci_notify_halt(struct mmc_host *mmc, bool halt)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	pr_debug("%s: halt notification was sent, halt=%d\n",
+		mmc_hostname(mmc), halt);
+	if (host->flags & SDHCI_USE_64_BIT_DMA) {
+		if (halt)
+			host->desc_sz = 16;
+		else
+			host->desc_sz = SDHCI_ADMA2_64_DESC_SZ;
+	}
+}
+
+static inline void sdhci_update_power_policy(struct sdhci_host *host,
+		enum sdhci_power_policy policy)
+{
+	host->power_policy = policy;
+}
+
+static int sdhci_notify_load(struct mmc_host *mmc, enum mmc_load state)
+{
+	int err = 0;
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	switch (state) {
+	case MMC_LOAD_HIGH:
+		sdhci_update_power_policy(host, SDHCI_PERFORMANCE_MODE);
+		break;
+	case MMC_LOAD_LOW:
+		sdhci_update_power_policy(host, SDHCI_POWER_SAVE_MODE);
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+
+	if (host->ops->notify_load)
+		err = host->ops->notify_load(host, state);
+
+	return err;
+}
+
+static bool sdhci_check_state(struct sdhci_host *host)
+{
+	if (!host->clock || !host->pwr)
+		return true;
+	else
+		return false;
+}
+
+static bool sdhci_check_auto_tuning(struct sdhci_host *host,
+				  struct mmc_command *cmd)
+{
+	if (((cmd->opcode != MMC_READ_SINGLE_BLOCK) &&
+	     (cmd->opcode != MMC_READ_MULTIPLE_BLOCK) &&
+	     (cmd->opcode != SD_IO_RW_EXTENDED)) || (host->clock < 100000000))
+		return false;
+	else if (host->mmc->ios.timing == MMC_TIMING_MMC_HS200 ||
+		 host->mmc->ios.timing == MMC_TIMING_UHS_SDR104)
+		return true;
+	else
+		return false;
+}
+
+static int sdhci_get_tuning_cmd(struct sdhci_host *host)
+{
+	if (!host->mmc || !host->mmc->card)
+		return 0;
+	/*
+	 * If we are here, all conditions have already been true
+	 * and the card can either be an eMMC or SD/SDIO
+	 */
+	if (mmc_card_mmc(host->mmc->card))
+		return MMC_SEND_TUNING_BLOCK_HS200;
+	else
+		return MMC_SEND_TUNING_BLOCK;
+}
+
 static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct sdhci_host *host;
@@ -1582,12 +1852,39 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	host = mmc_priv(mmc);
 
-	/* Firstly check card presence */
+	if (sdhci_check_state(host)) {
+		sdhci_dump_state(host);
+		WARN(1, "sdhci in bad state");
+		mrq->cmd->error = -EIO;
+		if (mrq->data)
+			mrq->data->error = -EIO;
+		host->mrq = NULL;
+		sdhci_dumpregs(host);
+		mmc_request_done(host->mmc, mrq);
+		return;
+	}
+
+	/*
+	 * Firstly check card presence from cd-gpio.  The return could
+	 * be one of the following possibilities:
+	 *     negative: cd-gpio is not available
+	 *     zero: cd-gpio is used, and card is removed
+	 *     one: cd-gpio is used, and card is present
+	 */
 	present = mmc->ops->get_cd(mmc);
+	if (present < 0) {
+		/* If polling, assume that the card is always present. */
+		if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
+			present = 1;
+		else
+			present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
+					SDHCI_CARD_PRESENT;
+	}
 
 	spin_lock_irqsave(&host->lock, flags);
 
-	sdhci_led_activate(host);
+	if (!(host->quirks2 & SDHCI_QUIRK2_BROKEN_LED_CONTROL))
+		sdhci_led_activate(host);
 
 	/*
 	 * Ensure we don't send the STOP for non-SET_BLOCK_COUNTED
@@ -1604,6 +1901,15 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		mrq->cmd->error = -ENOMEDIUM;
 		sdhci_finish_mrq(host, mrq);
 	} else {
+		if (host->ops->config_auto_tuning_cmd) {
+			if (sdhci_check_auto_tuning(host, mrq->cmd))
+				host->ops->config_auto_tuning_cmd(host, true,
+					sdhci_get_tuning_cmd(host));
+			else
+				host->ops->config_auto_tuning_cmd(host, false,
+					sdhci_get_tuning_cmd(host));
+		}
+
 		if (mrq->sbc && !(host->flags & SDHCI_AUTO_CMD23))
 			sdhci_send_command(host, mrq->sbc);
 		else
@@ -1612,6 +1918,7 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	mmiowb();
 	spin_unlock_irqrestore(&host->lock, flags);
+	return;
 }
 
 void sdhci_set_bus_width(struct sdhci_host *host, int width)
@@ -1659,45 +1966,27 @@ void sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned timing)
 }
 EXPORT_SYMBOL_GPL(sdhci_set_uhs_signaling);
 
-static bool sdhci_timing_has_preset(unsigned char timing)
+void sdhci_cfg_irq(struct sdhci_host *host, bool enable, bool sync)
 {
-	switch (timing) {
-	case MMC_TIMING_UHS_SDR12:
-	case MMC_TIMING_UHS_SDR25:
-	case MMC_TIMING_UHS_SDR50:
-	case MMC_TIMING_UHS_SDR104:
-	case MMC_TIMING_UHS_DDR50:
-	case MMC_TIMING_MMC_DDR52:
-		return true;
-	};
-	return false;
+	if (enable && !(host->flags & SDHCI_HOST_IRQ_STATUS)) {
+		enable_irq(host->irq);
+		host->flags |= SDHCI_HOST_IRQ_STATUS;
+	} else if (!enable && (host->flags & SDHCI_HOST_IRQ_STATUS)) {
+		if (sync)
+			disable_irq(host->irq);
+		else
+			disable_irq_nosync(host->irq);
+		host->flags &= ~SDHCI_HOST_IRQ_STATUS;
+	}
 }
-
-static bool sdhci_preset_needed(struct sdhci_host *host, unsigned char timing)
-{
-	return !(host->quirks2 & SDHCI_QUIRK2_PRESET_VALUE_BROKEN) &&
-	       sdhci_timing_has_preset(timing);
-}
-
-static bool sdhci_presetable_values_change(struct sdhci_host *host, struct mmc_ios *ios)
-{
-	/*
-	 * Preset Values are: Driver Strength, Clock Generator and SDCLK/RCLK
-	 * Frequency. Check if preset values need to be enabled, or the Driver
-	 * Strength needs updating. Note, clock changes are handled separately.
-	 */
-	return !host->preset_enabled &&
-	       (sdhci_preset_needed(host, ios->timing) || host->drv_type != ios->drv_type);
-}
+EXPORT_SYMBOL(sdhci_cfg_irq);
 
 void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
-	bool reinit_uhs = host->reinit_uhs;
-	bool turning_on_clk = false;
+	unsigned long flags;
 	u8 ctrl;
-
-	host->reinit_uhs = false;
+	int ret;
 
 	if (ios->power_mode == MMC_POWER_UNDEFINED)
 		return;
@@ -1709,24 +1998,21 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		return;
 	}
 
-	/*
-	 * Reset the chip on each power off.
-	 * Should clear out any weird states.
-	 */
-	if (ios->power_mode == MMC_POWER_OFF) {
-		sdhci_writel(host, 0, SDHCI_SIGNAL_ENABLE);
-		sdhci_reinit(host);
-	}
-
 	if (host->version >= SDHCI_SPEC_300 &&
 		(ios->power_mode == MMC_POWER_UP) &&
 		!(host->quirks2 & SDHCI_QUIRK2_PRESET_VALUE_BROKEN))
 		sdhci_enable_preset_value(host, false);
 
-	if (!ios->clock || ios->clock != host->clock) {
-		turning_on_clk = ios->clock && !host->clock;
+	spin_lock_irqsave(&host->lock, flags);
+	if (host->mmc && host->mmc->card &&
+			mmc_card_sdio(host->mmc->card))
+		sdhci_cfg_irq(host, false, false);
 
+	if (ios->clock &&
+	    ((ios->clock != host->clock) || (ios->timing != host->timing))) {
+		spin_unlock_irqrestore(&host->lock, flags);
 		host->ops->set_clock(host, ios->clock);
+		spin_lock_irqsave(&host->lock, flags);
 		host->clock = ios->clock;
 
 		if (host->quirks & SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK &&
@@ -1741,27 +2027,53 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			host->mmc->max_busy_timeout /= host->timeout_clk;
 		}
 	}
+	if (ios->clock && host->sdio_irq_async_status)
+		sdhci_enable_sdio_irq_nolock(host, false);
+	spin_unlock_irqrestore(&host->lock, flags);
+
+	/*
+	 * The controller clocks may be off during power-up and we may end up
+	 * enabling card clock before giving power to the card. Hence, during
+	 * MMC_POWER_UP enable the controller clock and turn-on the regulators.
+	 * The mmc_power_up would provide the necessary delay before turning on
+	 * the clocks to the card.
+	 */
+	if (ios->power_mode & MMC_POWER_UP) {
+		if (host->ops->enable_controller_clock) {
+			ret = host->ops->enable_controller_clock(host);
+			if (ret) {
+				pr_err("%s: enabling controller clock: failed: %d\n",
+				       mmc_hostname(host->mmc), ret);
+			} else {
+				sdhci_set_power(host, ios->power_mode,
+						ios->vdd);
+			}
+		}
+	}
+
+	spin_lock_irqsave(&host->lock, flags);
+	if (!host->clock) {
+		if (host->mmc && host->mmc->card &&
+				mmc_card_sdio(host->mmc->card))
+			sdhci_cfg_irq(host, true, false);
+		spin_unlock_irqrestore(&host->lock, flags);
+		return;
+	}
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	if (host->ops->set_power)
 		host->ops->set_power(host, ios->power_mode, ios->vdd);
 	else
-		sdhci_set_power(host, ios->power_mode, ios->vdd);
+		if (!host->ops->enable_controller_clock && (ios->power_mode &
+					(MMC_POWER_UP | MMC_POWER_ON)))
+			sdhci_set_power(host, ios->power_mode, ios->vdd);
+
+	spin_lock_irqsave(&host->lock, flags);
 
 	if (host->ops->platform_send_init_74_clocks)
 		host->ops->platform_send_init_74_clocks(host, ios->power_mode);
 
 	host->ops->set_bus_width(host, ios->bus_width);
-
-	/*
-	 * Special case to avoid multiple clock changes during voltage
-	 * switching.
-	 */
-	if (!reinit_uhs &&
-	    turning_on_clk &&
-	    host->timing == ios->timing &&
-	    host->version >= SDHCI_SPEC_300 &&
-	    !sdhci_presetable_values_change(host, ios))
-		return;
 
 	ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
 
@@ -1806,7 +2118,6 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			}
 
 			sdhci_writew(host, ctrl_2, SDHCI_HOST_CONTROL2);
-			host->drv_type = ios->drv_type;
 		} else {
 			/*
 			 * According to SDHC Spec v3.00, if the Preset Value
@@ -1823,7 +2134,11 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
 
 			/* Re-enable SD Clock */
-			host->ops->set_clock(host, host->clock);
+			if (ios->clock) {
+				spin_unlock_irqrestore(&host->lock, flags);
+				host->ops->set_clock(host, host->clock);
+				spin_lock_irqsave(&host->lock, flags);
+			}
 		}
 
 		/* Reset SD Clock Enable */
@@ -1834,21 +2149,31 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		host->ops->set_uhs_signaling(host, ios->timing);
 		host->timing = ios->timing;
 
-		if (sdhci_preset_needed(host, ios->timing)) {
+		if (!(host->quirks2 & SDHCI_QUIRK2_PRESET_VALUE_BROKEN) &&
+				((ios->timing == MMC_TIMING_UHS_SDR12) ||
+				 (ios->timing == MMC_TIMING_UHS_SDR25) ||
+				 (ios->timing == MMC_TIMING_UHS_SDR50) ||
+				 (ios->timing == MMC_TIMING_UHS_SDR104) ||
+				 (ios->timing == MMC_TIMING_UHS_DDR50) ||
+				 (ios->timing == MMC_TIMING_MMC_DDR52))) {
 			u16 preset;
 
 			sdhci_enable_preset_value(host, true);
 			preset = sdhci_get_preset_value(host);
-			ios->drv_type = FIELD_GET(SDHCI_PRESET_DRV_MASK,
-						  preset);
-			host->drv_type = ios->drv_type;
+			ios->drv_type = (preset & SDHCI_PRESET_DRV_MASK)
+				>> SDHCI_PRESET_DRV_SHIFT;
 		}
 
 		/* Re-enable SD Clock */
-		host->ops->set_clock(host, host->clock);
+		if (ios->clock) {
+			spin_unlock_irqrestore(&host->lock, flags);
+			host->ops->set_clock(host, host->clock);
+			spin_lock_irqsave(&host->lock, flags);
+		}
 	} else
 		sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
 
+	spin_unlock_irqrestore(&host->lock, flags);
 	/*
 	 * Some (ENE) controllers go apeshit on some ios operation,
 	 * signalling timeout and CRC errors even on CMD0. Resetting
@@ -1856,6 +2181,24 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	 */
 	if (host->quirks & SDHCI_QUIRK_RESET_CMD_DATA_ON_IOS)
 		sdhci_do_reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+
+	/*
+	 * Reset the chip on each power off.
+	 * Should clear out any weird states.
+	 */
+	if (ios->power_mode == MMC_POWER_OFF) {
+		sdhci_writel(host, 0, SDHCI_SIGNAL_ENABLE);
+		sdhci_reinit(host);
+		sdhci_set_power(host, ios->power_mode, ios->vdd);
+	}
+	if (!ios->clock)
+		host->ops->set_clock(host, ios->clock);
+
+	spin_lock_irqsave(&host->lock, flags);
+	if (host->mmc && host->mmc->card &&
+			mmc_card_sdio(host->mmc->card))
+		sdhci_cfg_irq(host, true, false);
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	mmiowb();
 }
@@ -1941,16 +2284,28 @@ static void sdhci_hw_reset(struct mmc_host *mmc)
 
 static void sdhci_enable_sdio_irq_nolock(struct sdhci_host *host, int enable)
 {
-	if (!(host->flags & SDHCI_DEVICE_DEAD)) {
-		if (enable)
-			host->ier |= SDHCI_INT_CARD_INT;
-		else
-			host->ier &= ~SDHCI_INT_CARD_INT;
+	u16 ctrl = 0;
 
-		sdhci_writel(host, host->ier, SDHCI_INT_ENABLE);
-		sdhci_writel(host, host->ier, SDHCI_SIGNAL_ENABLE);
-		mmiowb();
+	if (host->flags & SDHCI_DEVICE_DEAD)
+		return;
+
+	if (mmc_card_and_host_support_async_int(host->mmc)) {
+		ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);
+		if (enable)
+			ctrl |= SDHCI_CTRL_ASYNC_INT_ENABLE;
+		else
+			ctrl &= ~SDHCI_CTRL_ASYNC_INT_ENABLE;
+		sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
 	}
+
+	if (enable)
+		host->ier |= SDHCI_INT_CARD_INT;
+	else
+		host->ier &= ~SDHCI_INT_CARD_INT;
+
+	sdhci_writel(host, host->ier, SDHCI_INT_ENABLE);
+	sdhci_writel(host, host->ier, SDHCI_SIGNAL_ENABLE);
+	mmiowb();
 }
 
 void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable)
@@ -1998,6 +2353,8 @@ int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 		/* Set 1.8V Signal Enable in the Host Control2 register to 0 */
 		ctrl &= ~SDHCI_CTRL_VDD_180;
 		sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
+		if (host->ops->check_power_status)
+			host->ops->check_power_status(host, REQ_IO_HIGH);
 
 		if (!IS_ERR(mmc->supply.vqmmc)) {
 			ret = mmc_regulator_set_vqmmc(mmc, ios);
@@ -2037,6 +2394,8 @@ int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 		 */
 		ctrl |= SDHCI_CTRL_VDD_180;
 		sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
+		if (host->ops->check_power_status)
+			host->ops->check_power_status(host, REQ_IO_LOW);
 
 		/* Some controller need to do more when switching */
 		if (host->ops->voltage_switch)
@@ -2240,6 +2599,17 @@ static void __sdhci_execute_tuning(struct sdhci_host *host, u32 opcode)
 	sdhci_reset_tuning(host);
 }
 
+static int sdhci_enhanced_strobe(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	int err = 0;
+
+	if (host->ops->enhanced_strobe)
+		err = host->ops->enhanced_strobe(host);
+
+	return err;
+}
+
 int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
@@ -2262,9 +2632,10 @@ int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	switch (host->timing) {
 	/* HS400 tuning is done in HS200 mode */
 	case MMC_TIMING_MMC_HS400:
-		err = -EINVAL;
-		goto out;
-
+		if (!(mmc->caps2 & MMC_CAP2_HS400_POST_TUNING)) {
+			err = -EINVAL;
+			goto out;
+		}
 	case MMC_TIMING_MMC_HS200:
 		/*
 		 * Periodic re-tuning for HS400 is not expected to be needed, so
@@ -2288,7 +2659,13 @@ int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	}
 
 	if (host->ops->platform_execute_tuning) {
+		/*
+		 * Make sure re-tuning won't get triggered for the CRC errors
+		 * occurred while executing tuning
+		 */
+		mmc_retune_disable(mmc);
 		err = host->ops->platform_execute_tuning(host, opcode);
+		mmc_retune_enable(mmc);
 		goto out;
 	}
 
@@ -2313,6 +2690,9 @@ static void sdhci_enable_preset_value(struct sdhci_host *host, bool enable)
 {
 	/* Host Controller v3.00 defines preset value registers */
 	if (host->version < SDHCI_SPEC_300)
+		return;
+
+	if (host->quirks2 & SDHCI_QUIRK2_BROKEN_PRESET_VALUE)
 		return;
 
 	/*
@@ -2349,6 +2729,9 @@ static void sdhci_post_req(struct mmc_host *mmc, struct mmc_request *mrq,
 			     mmc_get_dma_dir(data));
 
 	data->host_cookie = COOKIE_UNMAPPED;
+
+	if (host->ops->post_req)
+		host->ops->post_req(host, mrq);
 }
 
 static void sdhci_pre_req(struct mmc_host *mmc, struct mmc_request *mrq)
@@ -2364,6 +2747,9 @@ static void sdhci_pre_req(struct mmc_host *mmc, struct mmc_request *mrq)
 	 */
 	if (host->flags & SDHCI_REQ_USE_DMA && !host->bounce_buffer)
 		sdhci_pre_dma_transfer(host, mrq->data, COOKIE_PRE_MAPPED);
+
+	if (host->ops->pre_req)
+		host->ops->pre_req(host, mrq);
 }
 
 static inline bool sdhci_has_requests(struct sdhci_host *host)
@@ -2414,7 +2800,27 @@ static void sdhci_card_event(struct mmc_host *mmc)
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
+static int sdhci_late_init(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (host->ops->init)
+		host->ops->init(host);
+
+	return 0;
+}
+
+static void sdhci_force_err_irq(struct mmc_host *mmc, u64 errmask)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	u16 mask = errmask & 0xFFFF;
+
+	pr_err("%s: Force raise error mask:0x%04x\n", __func__, mask);
+	sdhci_writew(host, mask, SDHCI_SET_INT_ERROR);
+}
+
 static const struct mmc_host_ops sdhci_ops = {
+	.init           = sdhci_late_init,
 	.request	= sdhci_request,
 	.post_req	= sdhci_post_req,
 	.pre_req	= sdhci_pre_req,
@@ -2426,8 +2832,14 @@ static const struct mmc_host_ops sdhci_ops = {
 	.start_signal_voltage_switch	= sdhci_start_signal_voltage_switch,
 	.prepare_hs400_tuning		= sdhci_prepare_hs400_tuning,
 	.execute_tuning			= sdhci_execute_tuning,
+	.enhanced_strobe		= sdhci_enhanced_strobe,
 	.card_event			= sdhci_card_event,
 	.card_busy	= sdhci_card_busy,
+	.enable		= sdhci_enable,
+	.disable	= sdhci_disable,
+	.notify_load	= sdhci_notify_load,
+	.notify_halt	= sdhci_notify_halt,
+	.force_err_irq	= sdhci_force_err_irq,
 };
 
 /*****************************************************************************\
@@ -2536,12 +2948,17 @@ static bool sdhci_request_done(struct sdhci_host *host)
 		sdhci_do_reset(host, SDHCI_RESET_DATA);
 
 		host->pending_reset = false;
+	} else {
+		if (host->quirks2 & SDHCI_QUIRK2_RDWR_TX_ACTIVE_EOT)
+			sdhci_reset(host, SDHCI_RESET_DATA);
 	}
 
 	if (!sdhci_has_requests(host))
-		sdhci_led_deactivate(host);
+		if (!(host->quirks2 & SDHCI_QUIRK2_BROKEN_LED_CONTROL))
+			sdhci_led_deactivate(host);
 
 	host->mrqs_done[i] = NULL;
+	host->auto_cmd_err_sts = 0;
 
 	mmiowb();
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -2569,8 +2986,10 @@ static void sdhci_timeout_timer(unsigned long data)
 	spin_lock_irqsave(&host->lock, flags);
 
 	if (host->cmd && !sdhci_data_line_cmd(host->cmd)) {
+		host->mmc->err_stats[MMC_ERR_REQ_TIMEOUT]++;
 		pr_err("%s: Timeout waiting for hardware cmd interrupt.\n",
 		       mmc_hostname(host->mmc));
+		MMC_TRACE(host->mmc, "Timeout waiting for h/w interrupt\n");
 		sdhci_dumpregs(host);
 
 		host->cmd->error = -ETIMEDOUT;
@@ -2592,11 +3011,18 @@ static void sdhci_timeout_data_timer(unsigned long data)
 
 	if (host->data || host->data_cmd ||
 	    (host->cmd && sdhci_data_line_cmd(host->cmd))) {
+		host->mmc->err_stats[MMC_ERR_REQ_TIMEOUT]++;
 		pr_err("%s: Timeout waiting for hardware interrupt.\n",
 		       mmc_hostname(host->mmc));
+		MMC_TRACE(host->mmc, "Timeout waiting for h/w interrupt\n");
 		sdhci_dumpregs(host);
 
 		if (host->data) {
+			pr_info("%s: bytes to transfer: %d transferred: %d\n",
+				mmc_hostname(host->mmc),
+				(host->data->blksz * host->data->blocks),
+				(sdhci_readw(host, SDHCI_BLOCK_SIZE) & 0xFFF) *
+				sdhci_readw(host, SDHCI_BLOCK_COUNT));
 			host->data->error = -ETIMEDOUT;
 			sdhci_finish_data(host);
 		} else if (host->data_cmd) {
@@ -2620,6 +3046,7 @@ static void sdhci_timeout_data_timer(unsigned long data)
 
 static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask, u32 *intmask_p)
 {
+	u16 auto_cmd_status;
 	/* Handle auto-CMD12 error */
 	if (intmask & SDHCI_INT_AUTO_CMD_ERR && host->data_cmd) {
 		struct mmc_request *mrq = host->data_cmd->mrq;
@@ -2645,21 +3072,51 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask, u32 *intmask_p)
 			return;
 		pr_err("%s: Got command interrupt 0x%08x even though no command operation was in progress.\n",
 		       mmc_hostname(host->mmc), (unsigned)intmask);
+		MMC_TRACE(host->mmc,
+		"Got command interrupt 0x%08x even though no command operation was in progress.\n",
+		(unsigned int)intmask);
 		sdhci_dumpregs(host);
 		return;
 	}
 
-	if (intmask & (SDHCI_INT_TIMEOUT | SDHCI_INT_CRC |
-		       SDHCI_INT_END_BIT | SDHCI_INT_INDEX)) {
-		if (intmask & SDHCI_INT_TIMEOUT)
-			host->cmd->error = -ETIMEDOUT;
-		else
-			host->cmd->error = -EILSEQ;
+	trace_mmc_cmd_rw_end(host->cmd->opcode, intmask,
+				sdhci_readl(host, SDHCI_RESPONSE));
 
-		/* Treat data command CRC error the same as data CRC error */
+	if (intmask & (SDHCI_INT_TIMEOUT | SDHCI_INT_CRC |
+		       SDHCI_INT_END_BIT | SDHCI_INT_INDEX |
+		       SDHCI_INT_AUTO_CMD_ERR)) {
+		if (intmask & SDHCI_INT_TIMEOUT) {
+			host->cmd->error = -ETIMEDOUT;
+			host->mmc->err_stats[MMC_ERR_CMD_TIMEOUT]++;
+		} else {
+			host->cmd->error = -EILSEQ;
+			host->mmc->err_stats[MMC_ERR_CMD_CRC]++;
+		}
+
+		if (intmask & SDHCI_INT_AUTO_CMD_ERR) {
+			auto_cmd_status = host->auto_cmd_err_sts;
+			host->mmc->err_stats[MMC_ERR_AUTO_CMD]++;
+			pr_err_ratelimited("%s: %s: AUTO CMD err sts 0x%08x\n",
+				mmc_hostname(host->mmc), __func__,
+					auto_cmd_status);
+			if (auto_cmd_status & (SDHCI_AUTO_CMD12_NOT_EXEC |
+					       SDHCI_AUTO_CMD_INDEX |
+					       SDHCI_AUTO_CMD_END_BIT))
+				host->cmd->error = -EIO;
+			else if (auto_cmd_status & SDHCI_AUTO_CMD_TIMEOUT)
+				host->cmd->error = -ETIMEDOUT;
+			else if (auto_cmd_status & SDHCI_AUTO_CMD_CRC)
+				host->cmd->error = -EILSEQ;
+		}
+
+		/* Treat data command CRC error the same as data CRC error
+		 *
+		 * Even in case of cmd INDEX OR ENDBIT error we
+		 * handle it the same way.
+		 */
 		if (host->cmd->data &&
-		    (intmask & (SDHCI_INT_CRC | SDHCI_INT_TIMEOUT)) ==
-		     SDHCI_INT_CRC) {
+		    (((intmask & (SDHCI_INT_CRC | SDHCI_INT_TIMEOUT)) ==
+		     SDHCI_INT_CRC) || (host->cmd->error == -EILSEQ))) {
 			host->cmd = NULL;
 			*intmask_p |= SDHCI_INT_DATA_CRC;
 			return;
@@ -2723,12 +3180,16 @@ static void sdhci_adma_show_error(struct sdhci_host *host)
 static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 {
 	u32 command;
+	bool pr_msg = false;
+
+	command = SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND));
+	trace_mmc_data_rw_end(command, intmask);
 
 	/* CMD19 generates _only_ Buffer Read Ready interrupt */
 	if (intmask & SDHCI_INT_DATA_AVAIL) {
-		command = SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND));
-		if (command == MMC_SEND_TUNING_BLOCK ||
-		    command == MMC_SEND_TUNING_BLOCK_HS200) {
+		if (!(host->quirks2 & SDHCI_QUIRK2_NON_STANDARD_TUNING) &&
+			(command == MMC_SEND_TUNING_BLOCK ||
+			command == MMC_SEND_TUNING_BLOCK_HS200)) {
 			host->tuning_done = 1;
 			wake_up(&host->buf_ready_int);
 			return;
@@ -2744,12 +3205,6 @@ static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 		 * above in sdhci_cmd_irq().
 		 */
 		if (data_cmd && (data_cmd->flags & MMC_RSP_BUSY)) {
-			if (intmask & SDHCI_INT_DATA_TIMEOUT) {
-				host->data_cmd = NULL;
-				data_cmd->error = -ETIMEDOUT;
-				sdhci_finish_mrq(host, data_cmd->mrq);
-				return;
-			}
 			if (intmask & SDHCI_INT_DATA_END) {
 				host->data_cmd = NULL;
 				/*
@@ -2760,6 +3215,23 @@ static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 				if (host->cmd == data_cmd)
 					return;
 
+				sdhci_finish_mrq(host, data_cmd->mrq);
+				return;
+			}
+			if (host->quirks2 &
+				SDHCI_QUIRK2_IGNORE_DATATOUT_FOR_R1BCMD) {
+				pr_err_ratelimited("%s: %s: ignoring interrupt: 0x%08x due to DATATOUT_FOR_R1B quirk\n",
+						mmc_hostname(host->mmc),
+						__func__, intmask);
+				MMC_TRACE(host->mmc,
+					"%s: Quirk ignoring intr: 0x%08x\n",
+						__func__, intmask);
+				return;
+			}
+			if (intmask & SDHCI_INT_DATA_TIMEOUT) {
+				host->data_cmd = NULL;
+				data_cmd->error = -ETIMEDOUT;
+				host->mmc->err_stats[MMC_ERR_CMD_TIMEOUT]++;
 				sdhci_finish_mrq(host, data_cmd->mrq);
 				return;
 			}
@@ -2775,31 +3247,62 @@ static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 
 		pr_err("%s: Got data interrupt 0x%08x even though no data operation was in progress.\n",
 		       mmc_hostname(host->mmc), (unsigned)intmask);
+		MMC_TRACE(host->mmc,
+		"Got data interrupt 0x%08x even though no data operation was in progress.\n",
+		(unsigned int)intmask);
 		sdhci_dumpregs(host);
 
 		return;
 	}
 
-	if (intmask & SDHCI_INT_DATA_TIMEOUT)
+	if (intmask & SDHCI_INT_DATA_TIMEOUT) {
 		host->data->error = -ETIMEDOUT;
+		host->mmc->err_stats[MMC_ERR_DAT_TIMEOUT]++;
+	}
 	else if (intmask & SDHCI_INT_DATA_END_BIT)
 		host->data->error = -EILSEQ;
 	else if ((intmask & SDHCI_INT_DATA_CRC) &&
-		SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND))
-			!= MMC_BUS_TEST_R)
+		(command != MMC_BUS_TEST_R)) {
 		host->data->error = -EILSEQ;
+		host->mmc->err_stats[MMC_ERR_DAT_CRC]++;
+	}
 	else if (intmask & SDHCI_INT_ADMA_ERROR) {
 		pr_err("%s: ADMA error: 0x%08x\n", mmc_hostname(host->mmc),
 		       intmask);
 		sdhci_adma_show_error(host);
+		host->mmc->err_stats[MMC_ERR_ADMA]++;
 		host->data->error = -EIO;
 		if (host->ops->adma_workaround)
 			host->ops->adma_workaround(host, intmask);
 	}
+	if (host->data->error) {
+		if (intmask & (SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT
+					| SDHCI_INT_DATA_END_BIT)) {
+			command = SDHCI_GET_CMD(sdhci_readw(host,
+							    SDHCI_COMMAND));
+			if ((command != MMC_SEND_TUNING_BLOCK_HS200) &&
+			    (command != MMC_SEND_TUNING_BLOCK))
+				pr_msg = true;
+		} else {
+			pr_msg = true;
+		}
+		if (pr_msg && __ratelimit(&host->dbg_dump_rs)) {
+			pr_err("%s: data txfr (0x%08x) error: %d after %lld ms\n",
+			       mmc_hostname(host->mmc), intmask,
+			       host->data->error, ktime_to_ms(ktime_sub(
+			       ktime_get(), host->data_start_time)));
+			MMC_TRACE(host->mmc,
+				"data txfr (0x%08x) error: %d after %lld ms\n",
+				intmask, host->data->error,
+				ktime_to_ms(ktime_sub(ktime_get(),
+				host->data_start_time)));
 
-	if (host->data->error)
+			if (!host->mmc->sdr104_wa ||
+			    (host->mmc->ios.timing != MMC_TIMING_UHS_SDR104))
+				sdhci_dumpregs(host);
+		}
 		sdhci_finish_data(host);
-	else {
+	} else {
 		if (intmask & (SDHCI_INT_DATA_AVAIL | SDHCI_INT_SPACE_AVAIL))
 			sdhci_transfer_pio(host);
 
@@ -2844,6 +3347,65 @@ static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 	}
 }
 
+#ifdef CONFIG_MMC_CQ_HCI
+static int sdhci_get_cmd_err(struct sdhci_host *host, u32 intmask)
+{
+	if (intmask & SDHCI_INT_TIMEOUT) {
+		host->mmc->err_stats[MMC_ERR_CMD_TIMEOUT]++;
+		return -ETIMEDOUT;
+	} else if (intmask & (SDHCI_INT_CRC | SDHCI_INT_END_BIT |
+			    SDHCI_INT_INDEX)) {
+		host->mmc->err_stats[MMC_ERR_CMD_CRC]++;
+		return -EILSEQ;
+	}
+	return 0;
+}
+
+static int sdhci_get_data_err(struct sdhci_host *host, u32 intmask)
+{
+	if (intmask & SDHCI_INT_DATA_TIMEOUT) {
+		host->mmc->err_stats[MMC_ERR_DAT_TIMEOUT]++;
+		return -ETIMEDOUT;
+	} else if (intmask & (SDHCI_INT_DATA_END_BIT | SDHCI_INT_DATA_CRC)) {
+		host->mmc->err_stats[MMC_ERR_DAT_CRC]++;
+		return -EILSEQ;
+	} else if (intmask & SDHCI_INT_ADMA_ERROR) {
+		host->mmc->err_stats[MMC_ERR_ADMA]++;
+		return -EIO;
+	}
+	return 0;
+}
+
+static irqreturn_t sdhci_cmdq_irq(struct sdhci_host *host, u32 intmask)
+{
+	int err = 0;
+	u32 mask = 0;
+	irqreturn_t ret;
+
+	if (intmask & SDHCI_INT_CMD_MASK)
+		err = sdhci_get_cmd_err(host, intmask);
+	else if (intmask & SDHCI_INT_DATA_MASK)
+		err = sdhci_get_data_err(host, intmask);
+
+	ret = cmdq_irq(host->mmc, err);
+	if (err) {
+		/* Clear the error interrupts */
+		mask = intmask & SDHCI_INT_ERROR_MASK;
+		sdhci_writel(host, mask, SDHCI_INT_STATUS);
+	}
+	return ret;
+
+}
+
+#else
+static irqreturn_t sdhci_cmdq_irq(struct sdhci_host *host, u32 intmask)
+{
+	pr_err("%s: Received cmdq-irq when disabled !!!!\n",
+		mmc_hostname(host->mmc));
+	return IRQ_NONE;
+}
+#endif
+
 static irqreturn_t sdhci_irq(int irq, void *dev_id)
 {
 	irqreturn_t result = IRQ_NONE;
@@ -2858,6 +3420,31 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 		return IRQ_NONE;
 	}
 
+	if (!host->clock && host->mmc->card &&
+			mmc_card_sdio(host->mmc->card)) {
+		if (!mmc_card_and_host_support_async_int(host->mmc)) {
+			spin_unlock(&host->lock);
+			return IRQ_NONE;
+		}
+		/*
+		 * async card interrupt is level sensitive and received
+		 * when clocks are off.
+		 * If sdio card has asserted async interrupt, in that
+		 * case we need to disable host->irq.
+		 * Later we can disable card interrupt and re-enable
+		 * host->irq.
+		 */
+
+		pr_debug("%s: %s: sdio_async intr. received\n",
+				mmc_hostname(host->mmc), __func__);
+		sdhci_cfg_irq(host, false, false);
+		host->sdio_irq_async_status = true;
+		host->thread_isr |= SDHCI_INT_CARD_INT;
+		result = IRQ_WAKE_THREAD;
+		spin_unlock(&host->lock);
+		return result;
+	}
+
 	intmask = sdhci_readl(host, SDHCI_INT_STATUS);
 	if (!intmask || intmask == 0xffffffff) {
 		result = IRQ_NONE;
@@ -2865,6 +3452,16 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 	}
 
 	do {
+		if (host->mmc->card && mmc_card_cmdq(host->mmc->card) &&
+		!mmc_host_halt(host->mmc) && !mmc_host_cq_disable(host->mmc)) {
+			pr_debug("*** %s: cmdq intr: 0x%08x\n",
+					mmc_hostname(host->mmc),
+					intmask);
+			result = sdhci_cmdq_irq(host, intmask);
+			if (result == IRQ_HANDLED)
+				goto out;
+		}
+
 		DBG("IRQ status 0x%08x\n", intmask);
 
 		if (host->ops->irq) {
@@ -2872,6 +3469,13 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 			if (!intmask)
 				goto cont;
 		}
+
+		MMC_TRACE(host->mmc,
+			"%s: intmask: 0x%x\n", __func__, intmask);
+
+		if (intmask & SDHCI_INT_AUTO_CMD_ERR)
+			host->auto_cmd_err_sts = sdhci_readw(host,
+			SDHCI_AUTO_CMD_STATUS);
 
 		/* Clear selected interrupts. */
 		mask = intmask & (SDHCI_INT_CMD_MASK | SDHCI_INT_DATA_MASK |
@@ -2908,11 +3512,19 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 			result = IRQ_WAKE_THREAD;
 		}
 
-		if (intmask & SDHCI_INT_CMD_MASK)
+		if (intmask & SDHCI_INT_CMD_MASK) {
+			if ((host->quirks2 & SDHCI_QUIRK2_SLOW_INT_CLR) &&
+				(host->clock <= 400000))
+				udelay(40);
 			sdhci_cmd_irq(host, intmask & SDHCI_INT_CMD_MASK, &intmask);
+		}
 
-		if (intmask & SDHCI_INT_DATA_MASK)
+		if (intmask & SDHCI_INT_DATA_MASK) {
+			if ((host->quirks2 & SDHCI_QUIRK2_SLOW_INT_CLR) &&
+			    (host->clock <= 400000))
+				udelay(40);
 			sdhci_data_irq(host, intmask & SDHCI_INT_DATA_MASK);
+		}
 
 		if (intmask & SDHCI_INT_BUS_POWER)
 			pr_err("%s: Card is consuming too much power!\n",
@@ -2949,7 +3561,13 @@ out:
 	if (unexpected) {
 		pr_err("%s: Unexpected interrupt 0x%08x.\n",
 			   mmc_hostname(host->mmc), unexpected);
-		sdhci_dumpregs(host);
+		MMC_TRACE(host->mmc, "Unexpected interrupt 0x%08x.\n",
+				unexpected);
+		if (host->mmc->cmdq_ops && host->mmc->cmdq_ops->dumpstate)
+			host->mmc->cmdq_ops->dumpstate(host->mmc);
+		else
+			sdhci_dumpregs(host);
+		BUG_ON(1);
 	}
 
 	return result;
@@ -2977,8 +3595,11 @@ static irqreturn_t sdhci_thread_irq(int irq, void *dev_id)
 		sdio_run_irqs(host->mmc);
 
 		spin_lock_irqsave(&host->lock, flags);
-		if (host->flags & SDHCI_SDIO_IRQ_ENABLED)
+		if (host->flags & SDHCI_SDIO_IRQ_ENABLED) {
+			if (host->sdio_irq_async_status)
+				host->sdio_irq_async_status = false;
 			sdhci_enable_sdio_irq_nolock(host, true);
+		}
 		spin_unlock_irqrestore(&host->lock, flags);
 	}
 
@@ -3067,7 +3688,6 @@ int sdhci_resume_host(struct sdhci_host *host)
 		sdhci_init(host, 0);
 		host->pwr = 0;
 		host->clock = 0;
-		host->reinit_uhs = true;
 		mmc->ops->set_ios(mmc, &mmc->ios);
 	} else {
 		sdhci_init(host, (host->mmc->pm_flags & MMC_PM_KEEP_POWER));
@@ -3132,7 +3752,6 @@ int sdhci_runtime_resume_host(struct sdhci_host *host)
 		/* Force clock and power re-program */
 		host->pwr = 0;
 		host->clock = 0;
-		host->reinit_uhs = true;
 		mmc->ops->start_signal_voltage_switch(mmc, &mmc->ios);
 		mmc->ops->set_ios(mmc, &mmc->ios);
 
@@ -3312,10 +3931,184 @@ struct sdhci_host *sdhci_alloc_host(struct device *dev,
 
 	host->sdma_boundary = SDHCI_DEFAULT_BOUNDARY_ARG;
 
+	spin_lock_init(&host->lock);
+	ratelimit_state_init(&host->dbg_dump_rs, SDHCI_DBG_DUMP_RS_INTERVAL,
+			SDHCI_DBG_DUMP_RS_BURST);
+
 	return host;
 }
 
 EXPORT_SYMBOL_GPL(sdhci_alloc_host);
+
+#ifdef CONFIG_MMC_CQ_HCI
+static void sdhci_cmdq_set_transfer_params(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	u8 ctrl;
+
+	if (host->version >= SDHCI_SPEC_200) {
+		ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
+		ctrl &= ~SDHCI_CTRL_DMA_MASK;
+		if (host->flags & SDHCI_USE_64_BIT_DMA)
+			ctrl |= SDHCI_CTRL_ADMA64;
+		else
+			ctrl |= SDHCI_CTRL_ADMA32;
+		sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
+	}
+	if (host->ops->toggle_cdr && !host->cdr_support)
+		host->ops->toggle_cdr(host, false);
+}
+
+static void sdhci_cmdq_clear_set_irqs(struct mmc_host *mmc, bool clear)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	u32 ier = 0;
+
+	ier &= ~SDHCI_INT_ALL_MASK;
+
+	if (clear) {
+		ier = SDHCI_INT_CMDQ_EN | SDHCI_INT_ERROR_MASK;
+		sdhci_writel(host, ier, SDHCI_INT_ENABLE);
+		sdhci_writel(host, ier, SDHCI_SIGNAL_ENABLE);
+	} else {
+		ier = SDHCI_INT_BUS_POWER | SDHCI_INT_DATA_END_BIT |
+			     SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT |
+			     SDHCI_INT_INDEX | SDHCI_INT_END_BIT |
+			     SDHCI_INT_CRC | SDHCI_INT_TIMEOUT |
+			     SDHCI_INT_DATA_END | SDHCI_INT_RESPONSE |
+			     SDHCI_INT_AUTO_CMD_ERR;
+		sdhci_writel(host, ier, SDHCI_INT_ENABLE);
+		sdhci_writel(host, ier, SDHCI_SIGNAL_ENABLE);
+	}
+}
+
+static void sdhci_cmdq_set_data_timeout(struct mmc_host *mmc, u32 val)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	sdhci_writeb(host, val, SDHCI_TIMEOUT_CONTROL);
+}
+
+static void sdhci_cmdq_dump_vendor_regs(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	sdhci_dumpregs(host);
+}
+
+static int sdhci_cmdq_init(struct sdhci_host *host, struct mmc_host *mmc,
+			   bool dma64)
+{
+	return cmdq_init(host->cq_host, mmc, dma64);
+}
+
+static void sdhci_cmdq_set_block_size(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	sdhci_set_blk_size_reg(host, 512, 0);
+}
+
+static void sdhci_enhanced_strobe_mask(struct mmc_host *mmc, bool set)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (host->ops->enhanced_strobe_mask)
+		host->ops->enhanced_strobe_mask(host, set);
+}
+
+static void sdhci_cmdq_clear_set_dumpregs(struct mmc_host *mmc, bool set)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (host->ops->clear_set_dumpregs)
+		host->ops->clear_set_dumpregs(host, set);
+}
+
+static void sdhci_cmdq_post_cqe_halt(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	sdhci_writel(host, sdhci_readl(host, SDHCI_INT_ENABLE) |
+			SDHCI_INT_RESPONSE, SDHCI_INT_ENABLE);
+	sdhci_writel(host, SDHCI_INT_RESPONSE, SDHCI_INT_STATUS);
+}
+#else
+static void sdhci_cmdq_set_transfer_params(struct mmc_host *mmc)
+{
+
+}
+static void sdhci_cmdq_clear_set_irqs(struct mmc_host *mmc, bool clear)
+{
+
+}
+
+static void sdhci_cmdq_set_data_timeout(struct mmc_host *mmc, u32 val)
+{
+
+}
+
+static void sdhci_cmdq_dump_vendor_regs(struct mmc_host *mmc)
+{
+
+}
+
+static int sdhci_cmdq_init(struct sdhci_host *host, struct mmc_host *mmc,
+			   bool dma64)
+{
+	return -ENOSYS;
+}
+
+static void sdhci_cmdq_set_block_size(struct mmc_host *mmc)
+{
+
+}
+
+static void sdhci_enhanced_strobe_mask(struct mmc_host *mmc, bool set)
+{
+
+}
+
+static void sdhci_cmdq_clear_set_dumpregs(struct mmc_host *mmc, bool set)
+{
+
+}
+
+static void sdhci_cmdq_post_cqe_halt(struct mmc_host *mmc)
+{
+
+}
+#endif
+
+static const struct cmdq_host_ops sdhci_cmdq_ops = {
+	.clear_set_irqs = sdhci_cmdq_clear_set_irqs,
+	.set_data_timeout = sdhci_cmdq_set_data_timeout,
+	.dump_vendor_regs = sdhci_cmdq_dump_vendor_regs,
+	.set_block_size = sdhci_cmdq_set_block_size,
+	.clear_set_dumpregs = sdhci_cmdq_clear_set_dumpregs,
+	.enhanced_strobe_mask = sdhci_enhanced_strobe_mask,
+	.post_cqe_halt = sdhci_cmdq_post_cqe_halt,
+	.set_transfer_params = sdhci_cmdq_set_transfer_params,
+};
+
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+static int sdhci_is_adma2_64bit(struct sdhci_host *host)
+{
+	u32 caps;
+
+	caps = (host->quirks & SDHCI_QUIRK_MISSING_CAPS) ? host->caps :
+		sdhci_readl(host, SDHCI_CAPABILITIES);
+
+	if (caps & SDHCI_CAN_64BIT)
+		return 1;
+	return 0;
+}
+#else
+static int sdhci_is_adma2_64bit(struct sdhci_host *host)
+{
+	return 0;
+}
+#endif
 
 static int sdhci_set_dma_mask(struct sdhci_host *host)
 {
@@ -3463,6 +4256,7 @@ static int sdhci_allocate_bounce_buffer(struct sdhci_host *host)
 int sdhci_setup_host(struct sdhci_host *host)
 {
 	struct mmc_host *mmc;
+	u32 caps[2] = {0, 0};
 	u32 max_current_caps;
 	unsigned int ocr_avail;
 	unsigned int override_timeout_clk;
@@ -3493,6 +4287,8 @@ int sdhci_setup_host(struct sdhci_host *host)
 	    sdhci_readl(host, SDHCI_CAPABILITIES_1));
 
 	sdhci_read_caps(host);
+
+	caps[0] = host->caps;
 
 	override_timeout_clk = host->timeout_clk;
 
@@ -3531,7 +4327,7 @@ int sdhci_setup_host(struct sdhci_host *host)
 	 * SDHCI_QUIRK2_BROKEN_64_BIT_DMA must be left to the drivers to
 	 * implement.
 	 */
-	if (host->caps & SDHCI_CAN_64BIT)
+	if (sdhci_is_adma2_64bit(host))
 		host->flags |= SDHCI_USE_64_BIT_DMA;
 
 	if (host->flags & (SDHCI_USE_SDMA | SDHCI_USE_ADMA)) {
@@ -3693,6 +4489,9 @@ int sdhci_setup_host(struct sdhci_host *host)
 	mmc->caps |= MMC_CAP_SDIO_IRQ | MMC_CAP_ERASE | MMC_CAP_CMD23;
 	mmc->caps2 |= MMC_CAP2_SDIO_IRQ_NOTHREAD;
 
+	if (caps[0] & SDHCI_CAN_ASYNC_INT)
+		mmc->caps2 |= MMC_CAP2_ASYNC_SDIO_IRQ_4BIT_MODE;
+
 	if (host->quirks & SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12)
 		host->flags |= SDHCI_AUTO_CMD12;
 
@@ -3725,7 +4524,8 @@ int sdhci_setup_host(struct sdhci_host *host)
 
 	if ((host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION) &&
 	    mmc_card_is_removable(mmc) &&
-	    mmc_gpio_get_cd(host->mmc) < 0)
+	    mmc_gpio_get_cd(host->mmc) < 0 &&
+	    !(mmc->caps2 & MMC_CAP2_NONHOTPLUG) && !host->mmc->extcon)
 		mmc->caps |= MMC_CAP_NEEDS_POLL;
 
 	if (!IS_ERR(mmc->supply.vqmmc)) {
@@ -3823,10 +4623,15 @@ int sdhci_setup_host(struct sdhci_host *host)
 	 * value.
 	 */
 	max_current_caps = sdhci_readl(host, SDHCI_MAX_CURRENT);
-	if (!max_current_caps && !IS_ERR(mmc->supply.vmmc)) {
-		int curr = regulator_get_current_limit(mmc->supply.vmmc);
-		if (curr > 0) {
+	if (!max_current_caps) {
+		u32 curr = 0;
 
+		if (!IS_ERR(mmc->supply.vmmc))
+			curr = regulator_get_current_limit(mmc->supply.vmmc);
+		else if (host->ops->get_current_limit)
+			curr = host->ops->get_current_limit(host);
+
+		if (curr > 0) {
 			/* convert to SDHCI_MAX_CURRENT format */
 			curr = curr/1000;  /* convert to mA */
 			curr = curr/SDHCI_MAX_CURRENT_MULTIPLIER;
@@ -3900,8 +4705,6 @@ int sdhci_setup_host(struct sdhci_host *host)
 
 	if (mmc->caps2 & MMC_CAP2_HSX00_1_2V)
 		host->flags |= SDHCI_SIGNALING_120;
-
-	spin_lock_init(&host->lock);
 
 	/*
 	 * Maximum number of sectors in one transfer. Limited by SDMA boundary
@@ -4022,6 +4825,8 @@ int __sdhci_add_host(struct sdhci_host *host)
 
 	init_waitqueue_head(&host->buf_ready_int);
 
+	host->flags |= SDHCI_HOST_IRQ_STATUS;
+
 	sdhci_init(host, 0);
 
 	ret = request_threaded_irq(host->irq, sdhci_irq, sdhci_thread_irq,
@@ -4032,31 +4837,54 @@ int __sdhci_add_host(struct sdhci_host *host)
 		goto untasklet;
 	}
 
-	ret = sdhci_led_register(host);
-	if (ret) {
-		pr_err("%s: Failed to register LED device: %d\n",
-		       mmc_hostname(mmc), ret);
-		goto unirq;
+	if (!(host->quirks2 & SDHCI_QUIRK2_BROKEN_LED_CONTROL)) {
+		ret = sdhci_led_register(host);
+		if (ret) {
+			pr_err("%s: Failed to register LED device: %d\n",
+			       mmc_hostname(mmc), ret);
+			goto unirq;
+		}
 	}
 
 	mmiowb();
+
+	if (host->quirks2 & SDHCI_QUIRK2_IGN_DATA_END_BIT_ERROR) {
+		host->ier = (host->ier & ~SDHCI_INT_DATA_END_BIT);
+		sdhci_writel(host, host->ier, SDHCI_INT_ENABLE);
+		sdhci_writel(host, host->ier, SDHCI_SIGNAL_ENABLE);
+	}
+
+	if (mmc->caps2 &  MMC_CAP2_CMD_QUEUE) {
+		bool dma64 = (host->flags & SDHCI_USE_64_BIT_DMA) ?
+			true : false;
+		ret = sdhci_cmdq_init(host, mmc, dma64);
+		if (ret)
+			pr_err("%s: CMDQ init: failed (%d)\n",
+			       mmc_hostname(host->mmc), ret);
+		else
+			host->cq_host->ops = &sdhci_cmdq_ops;
+	}
+
+	pr_info("%s: SDHCI controller on %s [%s] using %s in %s mode\n",
+	mmc_hostname(mmc), host->hw_name, dev_name(mmc_dev(mmc)),
+		(host->flags & SDHCI_USE_ADMA) ?
+		((host->flags & SDHCI_USE_64_BIT_DMA) ?
+		"64-bit ADMA" : "32-bit ADMA") :
+		((host->flags & SDHCI_USE_SDMA) ? "DMA" : "PIO"),
+		((mmc->caps2 &  MMC_CAP2_CMD_QUEUE) && !ret) ?
+		"CMDQ" : "legacy");
+
+	sdhci_enable_card_detection(host);
 
 	ret = mmc_add_host(mmc);
 	if (ret)
 		goto unled;
 
-	pr_info("%s: SDHCI controller on %s [%s] using %s\n",
-		mmc_hostname(mmc), host->hw_name, dev_name(mmc_dev(mmc)),
-		(host->flags & SDHCI_USE_ADMA) ?
-		(host->flags & SDHCI_USE_64_BIT_DMA) ? "ADMA 64-bit" : "ADMA" :
-		(host->flags & SDHCI_USE_SDMA) ? "DMA" : "PIO");
-
-	sdhci_enable_card_detection(host);
-
 	return 0;
 
 unled:
-	sdhci_led_unregister(host);
+	if (!(host->quirks2 & SDHCI_QUIRK2_BROKEN_LED_CONTROL))
+		sdhci_led_unregister(host);
 unirq:
 	sdhci_do_reset(host, SDHCI_RESET_ALL);
 	sdhci_writel(host, 0, SDHCI_INT_ENABLE);
@@ -4111,9 +4939,10 @@ void sdhci_remove_host(struct sdhci_host *host, int dead)
 
 	sdhci_disable_card_detection(host);
 
-	mmc_remove_host(mmc);
+	mmc_remove_host(host->mmc);
 
-	sdhci_led_unregister(host);
+	if (!(host->quirks2 & SDHCI_QUIRK2_BROKEN_LED_CONTROL))
+		sdhci_led_unregister(host);
 
 	if (!dead)
 		sdhci_do_reset(host, SDHCI_RESET_ALL);
