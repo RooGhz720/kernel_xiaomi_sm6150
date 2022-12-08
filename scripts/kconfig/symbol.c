@@ -1153,6 +1153,7 @@ static void sym_check_print_recursive(struct symbol *last_sym)
 			fprintf(stderr, "For a resolution refer to Documentation/kbuild/kconfig-language.txt\n");
 			fprintf(stderr, "subsection \"Kconfig recursive dependency limitations\"\n");
 		}
+
 		if (stack->expr) {
 			fprintf(stderr, "%s:%d:\tsymbol %s %s value contains %s\n",
 				prop->file->name, prop->lineno,
@@ -1181,6 +1182,11 @@ static void sym_check_print_recursive(struct symbol *last_sym)
 				next_sym->name ? next_sym->name : "<choice>");
 		}
 	}
+
+	fprintf(stderr,
+		"For a resolution refer to Documentation/kbuild/kconfig-language.txt\n"
+		"subsection \"Kconfig recursive dependency limitations\"\n"
+		"\n");
 
 	if (check_top == &cv_stack)
 		dep_stack_remove();
