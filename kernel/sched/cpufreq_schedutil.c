@@ -408,21 +408,8 @@ static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
 	if (is_hiload && nl >= mult_frac(cpu_util, NL_RATIO, 100))
 		*util = *max;
 
-	if (sg_policy->tunables->pl && pl > *util) {
-		if (conservative_pl() || is_battery_saver_on())
-			pl = mult_frac(pl, TARGET_LOAD, 100);
-		*util = (*util + pl) / 2;
-	}
-}
-
-static inline unsigned long target_util(struct sugov_policy *sg_policy,
-				  unsigned int freq)
-{
-	unsigned long util;
-
-	util = freq_to_util(sg_policy, freq);
-	util = mult_frac(util, TARGET_LOAD, 100);
-	return util;
+	if (sg_policy->tunables->pl)
+		*util = max(*util, sg_cpu->walt_load.pl);
 }
 
 static void sugov_update_single(struct update_util_data *hook, u64 time,
