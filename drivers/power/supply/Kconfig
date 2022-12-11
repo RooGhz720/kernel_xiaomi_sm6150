@@ -617,6 +617,12 @@ config K6_CHARGE
 	  Say Y to enable Xiaomi Redmi Note 10 Pro (K6/sweet) specific
 	  modifications.
 
+config AUTOCUT_CHARGER
+	bool "AutoCut Charger"
+	default n
+	help
+	  Disable battery charging if battery capacity at 99.
+
 source "drivers/power/supply/qcom/Kconfig"
 source "drivers/power/supply/maxim/Kconfig"
 source "drivers/power/supply/maxim_k6/Kconfig"
