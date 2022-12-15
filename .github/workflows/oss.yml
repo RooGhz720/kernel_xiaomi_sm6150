@@ -4,7 +4,7 @@ on:
 
 jobs:
    build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
 
     steps:
     - name: setting configurasi
@@ -18,7 +18,7 @@ jobs:
           libssl-dev libtfm-dev wget device-tree-compiler \
           ca-certificates python3 python2 binutils \
           binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
-          libghc-libyaml-dev \
+          libghc-libyaml-dev libyaml-dev \
     - name: kompile krunulll....
       run: |
           curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/.oss.sh > .oss.sh
