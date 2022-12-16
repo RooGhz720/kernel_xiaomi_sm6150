@@ -21,7 +21,7 @@ jobs:
           libghc-libyaml-dev libyaml-dev \
     - name: kompile krunulll....
       run: |
-          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/miui.sh > miui.sh
+          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/nonrx/miui.sh > miui.sh
           chmod +x miui.sh
           bash miui.sh
       shell: bash

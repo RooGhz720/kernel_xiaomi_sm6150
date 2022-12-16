@@ -21,9 +21,9 @@ jobs:
           libghc-libyaml-dev libyaml-dev \
     - name: kompile krunulll....
       run: |
-          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/.oss.sh > .oss.sh
-          chmod +x .oss.sh
-          bash .oss.sh
+          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/nonrx/oss.sh > oss.sh
+          chmod +x oss.sh
+          bash oss.sh
       shell: bash
       env:
          CHATID: ${{ secrets.CHAT_ID }}
