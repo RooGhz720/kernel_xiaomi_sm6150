@@ -136,14 +136,6 @@ static int fdt_splice_struct_(void *fdt, void *p,
 	return 0;
 }
 
-/* Must only be used to roll back in case of error */
-static void fdt_del_last_string_(void *fdt, const char *s)
-{
-	int newlen = strlen(s) + 1;
-
-	fdt_set_size_dt_strings(fdt, fdt_size_dt_strings(fdt) - newlen);
-}
-
 static int fdt_splice_string_(void *fdt, int newlen)
 {
 	void *p = (char *)fdt
@@ -157,15 +149,13 @@ static int fdt_splice_string_(void *fdt, int newlen)
 	return 0;
 }
 
-static int fdt_find_add_string_(void *fdt, const char *s, int *allocated)
+static int fdt_find_add_string_(void *fdt, const char *s)
 {
 	char *strtab = (char *)fdt + fdt_off_dt_strings(fdt);
 	const char *p;
 	char *new;
 	int len = strlen(s) + 1;
 	int err;
-
-	*allocated = 0;
 
 	p = fdt_find_string_(strtab, fdt_size_dt_strings(fdt), s);
 	if (p)
@@ -176,8 +166,6 @@ static int fdt_find_add_string_(void *fdt, const char *s, int *allocated)
 	err = fdt_splice_string_(fdt, len);
 	if (err)
 		return err;
-
-	*allocated = 1;
 
 	memcpy(new, s, len);
 	return (new - strtab);
@@ -237,12 +225,11 @@ static int fdt_add_property_(void *fdt, int nodeoffset, const char *name,
 	int nextoffset;
 	int namestroff;
 	int err;
-	int allocated;
 
 	if ((nextoffset = fdt_check_node_offset_(fdt, nodeoffset)) < 0)
 		return nextoffset;
 
-	namestroff = fdt_find_add_string_(fdt, name, &allocated);
+	namestroff = fdt_find_add_string_(fdt, name);
 	if (namestroff < 0)
 		return namestroff;
 
@@ -250,11 +237,8 @@ static int fdt_add_property_(void *fdt, int nodeoffset, const char *name,
 	proplen = sizeof(**prop) + FDT_TAGALIGN(len);
 
 	err = fdt_splice_struct_(fdt, *prop, 0, proplen);
-	if (err) {
-		if (allocated)
-			fdt_del_last_string_(fdt, name);
+	if (err)
 		return err;
-	}
 
 	(*prop)->tag = cpu_to_fdt32(FDT_PROP);
 	(*prop)->nameoff = cpu_to_fdt32(namestroff);
