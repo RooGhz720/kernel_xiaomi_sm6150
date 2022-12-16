@@ -17,7 +17,6 @@
 #else
 #define PRINTF(i, j)	__attribute__((format (gnu_printf, i, j)))
 #endif
-
 #define NORETURN	__attribute__((noreturn))
 #else
 #define PRINTF(i, j)
