@@ -86,7 +86,7 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
 
 # Only replace the real compile.h if the new one is different,
 # in order to preserve the timestamp and avoid unnecessary
-# recompilations.
+# recompilations
 # We don't consider the file changed if only the date/time changed,
 # unless KBUILD_BUILD_TIMESTAMP was explicitly set (e.g. for
 # reproducible builds with that value referring to a commit timestamp).
