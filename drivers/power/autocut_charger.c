@@ -66,13 +66,13 @@ static void autocut_charger_worker(struct work_struct *work)
 
 	if (full_disable_charging) {
 		if (present.intval) {
-			if (charging_enabled.intval && bat_percent.intval >= 100) {
+			if (charging_enabled.intval && bat_percent.intval >= 90) {
 				val.intval = false;
 				rc = power_supply_set_property(batt_psy,
 					POWER_SUPPLY_PROP_CHARGING_ENABLED, &val);
 				if (rc)
 					pr_err("%s: Failed to disable battery charging!\n", __func__);
-			} else if (!charging_enabled.intval && bat_percent.intval <= 90) {
+			} else if (!charging_enabled.intval && bat_percent.intval <= 89) {
 				val.intval = true;
 				rc = power_supply_set_property(batt_psy,
 					POWER_SUPPLY_PROP_CHARGING_ENABLED, &val);
@@ -90,13 +90,13 @@ static void autocut_charger_worker(struct work_struct *work)
 		}
 	} else {
 		if (present.intval) {
-			if (charging_enabled.intval && bat_percent.intval >= 99) {
+			if (charging_enabled.intval && bat_percent.intval >= 90) {
 				val.intval = false;
 				rc = power_supply_set_property(batt_psy,
 					POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED, &val);
 				if (rc)
 					pr_err("%s: Failed to disable battery charging!\n", __func__);
-			} else if (!charging_enabled.intval && bat_percent.intval < 100) {
+			} else if (!charging_enabled.intval && bat_percent.intval < 89) {
 				val.intval = true;
 				rc = power_supply_set_property(batt_psy,
 					POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED, &val);
