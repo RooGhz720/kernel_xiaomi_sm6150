@@ -4,7 +4,7 @@ on:
 
 jobs:
    build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
     - name: setting configurasi
@@ -18,7 +18,7 @@ jobs:
           libssl-dev libtfm-dev wget device-tree-compiler \
           ca-certificates python3 python2 binutils \
           binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
-          libghc-libyaml-dev libyaml-dev \
+          libghc-libyaml-dev libyaml-dev glibc-source \
     - name: kompile krunulll....
       run: |
           curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/nonrx/miui.sh > miui.sh
