@@ -24,7 +24,7 @@
 #define DEF_FREQUENCY_UP_THRESHOLD		(80)
 #define DEF_SAMPLING_DOWN_FACTOR		(1)
 #define MAX_SAMPLING_DOWN_FACTOR		(100000)
-#define MICRO_FREQUENCY_UP_THRESHOLD		(95)
+#define MICRO_FREQUENCY_UP_THRESHOLD		(75)
 #define MICRO_FREQUENCY_MIN_SAMPLE_RATE		(10000)
 #define MIN_FREQUENCY_UP_THRESHOLD		(1)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
@@ -460,7 +460,7 @@ EXPORT_SYMBOL_GPL(od_register_powersave_bias_handler);
 void od_unregister_powersave_bias_handler(void)
 {
 	od_ops.powersave_bias_target = generic_powersave_bias_target;
-	od_set_powersave_bias(0);
+	od_set_powersave_bias(600);
 }
 EXPORT_SYMBOL_GPL(od_unregister_powersave_bias_handler);
 
