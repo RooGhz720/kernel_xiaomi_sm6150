@@ -2680,6 +2680,8 @@ static int qpnp_haptics_probe(struct platform_device *pdev)
 			goto sysfs_fail;
 		}
 	}
+	
+	gchip = chip;
 
 	gchip = chip;
 
