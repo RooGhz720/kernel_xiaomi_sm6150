@@ -44,7 +44,6 @@
 #include <linux/mm.h>
 #include <net/tcp.h>
 #include <linux/inet_diag.h>
-#include "tcp_dctcp.h"
 
 #define DCTCP_MAX_ALPHA	1024U
 
@@ -228,12 +227,12 @@ static void dctcp_state(struct sock *sk, u8 new_state)
 
 static void dctcp_cwnd_event(struct sock *sk, enum tcp_ca_event ev)
 {
-	struct dctcp *ca = inet_csk_ca(sk);
-
 	switch (ev) {
 	case CA_EVENT_ECN_IS_CE:
+		dctcp_ce_state_0_to_1(sk);
+		break;
 	case CA_EVENT_ECN_NO_CE:
-		dctcp_ece_ack_update(sk, ev, &ca->prior_rcv_nxt, &ca->ce_state);
+		dctcp_ce_state_1_to_0(sk);
 		break;
 	case CA_EVENT_LOSS:
 		dctcp_react_to_loss(sk);
