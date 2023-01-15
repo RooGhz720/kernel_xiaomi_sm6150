@@ -130,7 +130,7 @@ int kp_active_mode(void)
 		return kp_override_mode;
 
 	if (unlikely(kp_mode > 3)) {
-		kp_mode = 0;
+		kp_mode = 1;
 		pr_info("Invalid value passed, falling back to level 0\n");
 	}
 
