@@ -385,7 +385,7 @@ static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
 #endif /* CONFIG_NO_HZ_COMMON */
 
 #define NL_RATIO 75
-#define DEFAULT_HISPEED_LOAD 90
+#define DEFAULT_HISPEED_LOAD 95
 static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
 			      unsigned long *max)
 {
@@ -976,12 +976,15 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us =
-				cpufreq_policy_transition_delay_us(policy);
-	tunables->down_rate_limit_us =
-				cpufreq_policy_transition_delay_us(policy);
+	/*
+	 * NOTE:
+	 * intializing up_rate/down_rate to 0 explicitly in kernel
+	 * since WALT expects so by default.
+	 */
+	tunables->up_rate_limit_us = 3000;
+	tunables->down_rate_limit_us = 850;
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
-	tunables->hispeed_freq = 0;
+	tunables->hispeed_freq = 1324600;
 
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;
