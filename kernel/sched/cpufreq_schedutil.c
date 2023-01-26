@@ -775,8 +775,6 @@ static ssize_t pl_store(struct gov_attr_set *attr_set, const char *buf,
 
 	if (kstrtobool(buf, &tunables->pl))
 		return -EINVAL;
-<<<<<<< HEAD
-=======
 	return count;
 }
 
@@ -801,7 +799,6 @@ static ssize_t iowait_boost_enable_store(struct gov_attr_set *attr_set,
 		return -EINVAL;
 
 	tunables->iowait_boost_enable = enable;
->>>>>>> 7867800ee802 (cpufreq: schedutil: Expose default configuration options and apply init protection)
 
 	return count;
 }
