@@ -5,31 +5,33 @@ use crate::{
     utils::{ensure_clean_dir, mount_image},
 };
 use anyhow::{bail, Result};
-use subprocess::Exec;
+use sys_mount::{FilesystemType, Mount, MountFlags};
 
 fn mount_partition(partition: &str, lowerdir: &mut Vec<String>) {
     if lowerdir.is_empty() {
-        println!("partition: {} lowerdir is empty", partition);
+        println!("partition: {partition} lowerdir is empty");
         return;
     }
 
+    // if /partition is a symlink and linked to /system/partition, then we don't need to overlay it separately
+    if Path::new(&format!("/{}", partition)).read_link().is_ok() {
+        println!("partition: {} is a symlink", partition);
+        return;
+    }
     // add /partition as the lowerest dir
-    let lowest_dir = format!("/{}", partition);
+    let lowest_dir = format!("/{partition}");
     lowerdir.push(lowest_dir.clone());
 
     let lowerdir = lowerdir.join(":");
-    println!("partition: {} lowerdir: {}", partition, lowerdir);
+    println!("partition: {partition} lowerdir: {lowerdir}");
 
-    let mount_args = format!(
-        "mount -t overlay overlay -o ro,lowerdir={} {}",
-        lowerdir, lowest_dir
-    );
-    if let Ok(result) = Exec::shell(mount_args).join() {
-        if !result.success() {
-            println!("mount partition: {} overlay failed", partition);
-        }
-    } else {
-        println!("mount partition: {} overlay failed", partition);
+    if let Err(err) = Mount::builder()
+        .fstype(FilesystemType::from("overlay"))
+        .flags(MountFlags::RDONLY)
+        .data(&format!("lowerdir={lowerdir}"))
+        .mount("overlay", lowest_dir)
+    {
+        println!("mount partition: {partition} overlay failed: {err}");
     }
 }
 
@@ -67,7 +69,9 @@ pub fn do_systemless_mount(module_dir: &str) -> Result<()> {
         system_lowerdir.push(format!("{}", module_system.display()));
 
         for part in &partition {
-            let part_path = Path::new(&module_system).join(part);
+            // if /partition is a mountpoint, we would move it to $MODPATH/$partition when install
+            // otherwise it must be a symlink and we don't need to overlay!
+            let part_path = Path::new(&module).join(part);
             if !part_path.exists() {
                 continue;
             }
@@ -123,13 +127,18 @@ pub fn on_post_data_fs() -> Result<()> {
     println!("mount {} to {}", target_update_img, module_dir);
     mount_image(target_update_img, module_dir)?;
 
+    // load sepolicy.rule
+    if (crate::module::load_sepolicy_rule().is_err()) {
+        println!("load sepolicy.rule failed");
+    }
+
     // mount systemless overlay
     if let Err(e) = do_systemless_mount(module_dir) {
         println!("do systemless mount failed: {}", e);
     }
 
     // module mounted, exec modules post-fs-data scripts
-    if !crate::utils::is_safe_mode().unwrap_or(false) {
+    if !crate::utils::is_safe_mode() {
         // todo: Add timeout
         let _ = crate::module::exec_post_fs_data();
         let _ = crate::module::load_system_prop();
@@ -142,7 +151,7 @@ pub fn on_post_data_fs() -> Result<()> {
 
 pub fn on_services() -> Result<()> {
     // exec modules service.sh scripts
-    if !crate::utils::is_safe_mode().unwrap_or(false) {
+    if !crate::utils::is_safe_mode() {
         let _ = crate::module::exec_services();
     } else {
         println!("safe mode, skip module service scripts");
