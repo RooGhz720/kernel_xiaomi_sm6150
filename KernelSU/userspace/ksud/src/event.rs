@@ -1,22 +1,21 @@
 use std::{collections::HashMap, path::Path};
 
 use crate::{
-    defs,
-    utils::{ensure_clean_dir, mount_image},
+    assets, defs, mount,
+    utils::{ensure_clean_dir, ensure_dir_exists},
 };
-use anyhow::{bail, Result};
-use sys_mount::{FilesystemType, Mount, MountFlags};
+use anyhow::{bail, Context, Result};
 
-fn mount_partition(partition: &str, lowerdir: &mut Vec<String>) {
+fn mount_partition(partition: &str, lowerdir: &mut Vec<String>) -> Result<()> {
     if lowerdir.is_empty() {
         println!("partition: {partition} lowerdir is empty");
-        return;
+        return Ok(());
     }
 
     // if /partition is a symlink and linked to /system/partition, then we don't need to overlay it separately
     if Path::new(&format!("/{}", partition)).read_link().is_ok() {
         println!("partition: {} is a symlink", partition);
-        return;
+        return Ok(());
     }
     // add /partition as the lowerest dir
     let lowest_dir = format!("/{partition}");
@@ -25,14 +24,7 @@ fn mount_partition(partition: &str, lowerdir: &mut Vec<String>) {
     let lowerdir = lowerdir.join(":");
     println!("partition: {partition} lowerdir: {lowerdir}");
 
-    if let Err(err) = Mount::builder()
-        .fstype(FilesystemType::from("overlay"))
-        .flags(MountFlags::RDONLY)
-        .data(&format!("lowerdir={lowerdir}"))
-        .mount("overlay", lowest_dir)
-    {
-        println!("mount partition: {partition} overlay failed: {err}");
-    }
+    mount::mount_overlay(&lowerdir, &lowest_dir)
 }
 
 pub fn do_systemless_mount(module_dir: &str) -> Result<()> {
@@ -82,11 +74,11 @@ pub fn do_systemless_mount(module_dir: &str) -> Result<()> {
     }
 
     // mount /system first
-    mount_partition("system", &mut system_lowerdir);
+    let _ = mount_partition("system", &mut system_lowerdir);
 
     // mount other partitions
     for (k, mut v) in partition_lowerdir {
-        mount_partition(&k, &mut v);
+        let _ = mount_partition(&k, &mut v);
     }
 
     Ok(())
@@ -104,6 +96,8 @@ pub fn on_post_data_fs() -> Result<()> {
 
     // we should clean the module mount point if it exists
     ensure_clean_dir(module_dir)?;
+
+    assets::ensure_bin_assets().with_context(|| "Failed to extract bin assets")?;
 
     if Path::new(module_update_img).exists() {
         if module_update_flag.exists() {
@@ -125,10 +119,10 @@ pub fn on_post_data_fs() -> Result<()> {
     }
 
     println!("mount {} to {}", target_update_img, module_dir);
-    mount_image(target_update_img, module_dir)?;
+    mount::mount_ext4(target_update_img, module_dir)?;
 
     // load sepolicy.rule
-    if (crate::module::load_sepolicy_rule().is_err()) {
+    if crate::module::load_sepolicy_rule().is_err() {
         println!("load sepolicy.rule failed");
     }
 
@@ -176,9 +170,9 @@ pub fn daemon() -> Result<()> {
 }
 
 pub fn install() -> Result<()> {
-    let src = "/proc/self/exe";
-    let dst = defs::DAEMON_PATH;
+    ensure_dir_exists(defs::ADB_DIR)?;
+    std::fs::copy("/proc/self/exe", defs::DAEMON_PATH)?;
 
-    std::fs::copy(src, dst)?;
-    Ok(())
+    // install binary assets also!
+    assets::ensure_bin_assets().with_context(|| "Failed to extract assets")
 }

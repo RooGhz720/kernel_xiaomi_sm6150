@@ -1,14 +1,21 @@
-use crate::{defs, restorecon, sepolicy};
-use crate::{restorecon::setsyscon, utils::*};
+use crate::{
+    defs,
+    restorecon::{restore_syscon, setsyscon},
+    sepolicy,
+    utils::*,
+    assets,
+    mount,
+};
 
 use const_format::concatcp;
 use java_properties::PropertiesIter;
 use log::{info, warn};
 use std::{
     collections::HashMap,
-    fs::{create_dir_all, remove_dir_all, File, OpenOptions},
+    env::var as env_var,
+    fs::{remove_dir_all, File, OpenOptions},
     io::{Cursor, Read, Write},
-    os::unix::{prelude::PermissionsExt, process::CommandExt},
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     str::FromStr,
@@ -27,6 +34,10 @@ fn exec_install_script(module_file: &str) -> Result<()> {
 
     let result = Command::new("sh")
         .args(["-c", INSTALL_MODULE_SCRIPT])
+        .env(
+            "PATH",
+            format!("{}:{}", env_var("PATH").unwrap(), defs::MODULE_DIR),
+        )
         .env("OUTFD", "1")
         .env("ZIPFILE", realpath)
         .stderr(Stdio::null())
@@ -48,30 +59,19 @@ fn ensure_boot_completed() -> Result<()> {
 }
 
 fn mark_update() -> Result<()> {
-    let update_file = Path::new(defs::WORKING_DIR).join(defs::UPDATE_FILE_NAME);
-    if update_file.exists() {
-        return Ok(());
-    }
-
-    std::fs::File::create(update_file)?;
-    Ok(())
+    ensure_file_exists(concatcp!(defs::WORKING_DIR, defs::UPDATE_FILE_NAME))
 }
 
 fn mark_module_state(module: &str, flag_file: &str, create_or_delete: bool) -> Result<()> {
     let module_state_file = Path::new(defs::MODULE_DIR).join(module).join(flag_file);
     if create_or_delete {
-        if module_state_file.exists() {
-            return Ok(());
-        }
-        std::fs::File::create(module_state_file)?;
+        ensure_file_exists(module_state_file)
     } else {
-        if !module_state_file.exists() {
-            return Ok(());
+        if module_state_file.exists() {
+            std::fs::remove_file(module_state_file)?;
         }
-        std::fs::remove_file(module_state_file)?;
+        Ok(())
     }
-
-    Ok(())
 }
 
 fn get_minimal_image_size(img: &str) -> Result<u64> {
@@ -84,8 +84,8 @@ fn get_minimal_image_size(img: &str) -> Result<u64> {
     println!("- {}", output.trim());
     let regex = regex::Regex::new(r"filesystem: (\d+)")?;
     let result = regex
-        .captures(output.as_ref())
-        .ok_or_else(|| anyhow::anyhow!("regex not match"))?;
+        .captures(&output)
+        .ok_or(anyhow::anyhow!("regex not match"))?;
     let result = &result[1];
     let result = u64::from_str(result)?;
     Ok(result)
@@ -122,7 +122,7 @@ fn grow_image_size(img: &str, extra_size: u64) -> Result<()> {
         "- Target image size: {}",
         humansize::format_size(target_size, humansize::DECIMAL)
     );
-    let target_size = target_size / 1024 + 1;
+    let target_size = target_size / 1024 + 1024;
 
     let result = Command::new("resize2fs")
         .args([img, &format!("{target_size}K")])
@@ -161,7 +161,7 @@ fn switch_cgroups() {
 }
 
 fn is_executable(path: &Path) -> bool {
-    let mut buffer: [u8; 2] = [0; 2];
+    let mut buffer = [0u8; 2];
     is_executable::is_executable(path)
         && File::open(path).unwrap().read_exact(&mut buffer).is_ok()
         && (
@@ -227,6 +227,10 @@ pub fn exec_post_fs_data() -> Result<()> {
         command = command
             .process_group(0)
             .current_dir(path)
+            .env(
+                "PATH",
+                format!("{}:{}", env_var("PATH").unwrap(), defs::MODULE_DIR),
+            )
             .env("KSU", "true");
         unsafe {
             command = command.pre_exec(|| {
@@ -273,6 +277,10 @@ pub fn exec_services() -> Result<()> {
         command = command
             .process_group(0)
             .current_dir(path)
+            .env(
+                "PATH",
+                format!("{}:{}", env_var("PATH").unwrap(), defs::MODULE_DIR),
+            )
             .env("KSU", "true");
         unsafe {
             command = command.pre_exec(|| {
@@ -289,20 +297,7 @@ pub fn exec_services() -> Result<()> {
     Ok(())
 }
 
-const RESETPROP: &[u8] = include_bytes!("./resetprop");
-const RESETPROP_PATH: &str = concatcp!(defs::WORKING_DIR, "/resetprop");
-
-fn ensure_resetprop() -> Result<()> {
-    if Path::new(RESETPROP_PATH).exists() {
-        return Ok(());
-    }
-    std::fs::write(RESETPROP_PATH, RESETPROP)?;
-    std::fs::set_permissions(RESETPROP_PATH, std::fs::Permissions::from_mode(0o755))?;
-    Ok(())
-}
-
 pub fn load_system_prop() -> Result<()> {
-    ensure_resetprop()?;
 
     let modules_dir = Path::new(defs::MODULE_DIR);
     let dir = std::fs::read_dir(modules_dir)?;
@@ -321,7 +316,7 @@ pub fn load_system_prop() -> Result<()> {
         println!("load {} system.prop", path.display());
 
         // resetprop -n --file system.prop
-        Command::new(RESETPROP_PATH)
+        Command::new(assets::RESETPROP_PATH)
             .arg("-n")
             .arg("--file")
             .arg(&system_prop)
@@ -332,22 +327,17 @@ pub fn load_system_prop() -> Result<()> {
     Ok(())
 }
 
-pub fn install_module(zip: String) -> Result<()> {
+fn do_install_module(zip: String) -> Result<()> {
     ensure_boot_completed()?;
 
     // print banner
     println!(include_str!("banner"));
 
-    // first check if workding dir is usable
-    let working_dir = Path::new(defs::WORKING_DIR);
-    if !working_dir.exists() {
-        create_dir_all(working_dir)?;
-    }
+    assets::ensure_bin_assets().with_context(|| "Failed to extract assets")?;
 
-    ensure!(
-        working_dir.is_dir(),
-        "working dir exists but it is not a regular directory!"
-    );
+    // first check if workding dir is usable
+    ensure_dir_exists(defs::WORKING_DIR).with_context(|| "Failed to create working dir")?;
+    ensure_dir_exists(defs::BINARY_DIR).with_context(|| "Failed to create bin dir")?;
 
     // read the module_id from zip, if faild if will return early.
     let mut buffer: Vec<u8> = Vec::new();
@@ -441,40 +431,35 @@ pub fn install_module(zip: String) -> Result<()> {
     // mount the modules_update.img to mountpoint
     println!("- Mounting image");
 
-    mount_image(tmp_module_img, module_update_tmp_dir)?;
+    mount::mount_ext4(tmp_module_img, module_update_tmp_dir)?;
 
     setsyscon(module_update_tmp_dir)?;
 
-    let result = {
-        let module_dir = format!("{}/{}", module_update_tmp_dir, module_id);
-        ensure_clean_dir(&module_dir)?;
-        info!("module dir: {}", module_dir);
+    let module_dir = format!("{module_update_tmp_dir}/{module_id}");
+    ensure_clean_dir(&module_dir)?;
+    info!("module dir: {}", module_dir);
 
-        // unzip the image and move it to modules_update/<id> dir
-        let file = File::open(&zip)?;
-        let mut archive = zip::ZipArchive::new(file)?;
-        archive.extract(&module_dir)?;
+    // unzip the image and move it to modules_update/<id> dir
+    let file = File::open(&zip)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+    archive.extract(&module_dir)?;
 
-        // set selinux for module/system dir
-        let mut module_system_dir = PathBuf::from(module_dir);
-        module_system_dir.push("system");
-        let module_system_dir = module_system_dir.as_path();
-        if module_system_dir.exists() {
-            let path = format!("{}", module_system_dir.display());
-            restorecon::restore_syscon(&path)?;
-        }
+    // set selinux for module/system dir
+    let mut module_system_dir = PathBuf::from(module_dir);
+    module_system_dir.push("system");
+    let module_system_dir = module_system_dir.as_path();
+    if module_system_dir.exists() {
+        let path = module_system_dir.to_str().unwrap();
+        restore_syscon(path)?;
+    }
 
-        exec_install_script(&zip)
-    };
+    exec_install_script(&zip)?;
 
     // umount the modules_update.img
-    let _ = umount_dir(module_update_tmp_dir);
+    mount::umount_dir(module_update_tmp_dir)?;
 
     // remove modules_update dir, ignore the error
-    let _ = remove_dir_all(module_update_tmp_dir);
-
-    // return if exec script failed
-    result.with_context(|| format!("Failed to execute install script for {}", module_id))?;
+    remove_dir_all(module_update_tmp_dir)?;
 
     // all done, rename the tmp image to modules_update.img
     if std::fs::rename(tmp_module_img, defs::MODULE_UPDATE_IMG).is_err() {
@@ -484,6 +469,17 @@ pub fn install_module(zip: String) -> Result<()> {
     mark_update()?;
 
     Ok(())
+}
+
+pub fn install_module(zip: String) -> Result<()> { 
+    let result = do_install_module(zip);
+    if result.is_err() {
+        // error happened, do some cleanup!
+        let _ = std::fs::remove_file(defs::MODULE_UPDATE_TMP_IMG);
+        let _ = mount::umount_dir(defs::MODULE_UPDATE_TMP_DIR);
+        let _ = std::fs::remove_dir_all(defs::MODULE_UPDATE_TMP_DIR);
+    }
+    result
 }
 
 fn do_module_update<F>(update_dir: &str, id: &str, func: F) -> Result<()>
@@ -517,13 +513,13 @@ where
     ensure_clean_dir(update_dir)?;
 
     // mount the modules_update img
-    mount_image(defs::MODULE_UPDATE_TMP_IMG, update_dir)?;
+    mount::mount_ext4(defs::MODULE_UPDATE_TMP_IMG, update_dir)?;
 
     // call the operation func
     let result = func(id, update_dir);
 
     // umount modules_update.img
-    let _ = umount_dir(update_dir);
+    let _ = mount::umount_dir(update_dir);
     let _ = remove_dir_all(update_dir);
 
     std::fs::rename(modules_update_tmp_img, defs::MODULE_UPDATE_IMG)?;
@@ -563,7 +559,7 @@ pub fn uninstall_module(id: String) -> Result<()> {
         }
 
         // santity check
-        let target_module_path = format!("{}/{}", update_dir, mid);
+        let target_module_path = format!("{update_dir}/{mid}");
         let target_module = Path::new(&target_module_path);
         if target_module.exists() {
             remove_dir_all(target_module)?;
@@ -576,7 +572,7 @@ pub fn uninstall_module(id: String) -> Result<()> {
 }
 
 fn do_enable_module(module_dir: &str, mid: &str, enable: bool) -> Result<()> {
-    let src_module_path = format!("{}/{}", module_dir, mid);
+    let src_module_path = format!("{module_dir}/{mid}");
     let src_module = Path::new(&src_module_path);
     if !src_module.exists() {
         bail!("module: {} not found!", mid);
@@ -589,8 +585,8 @@ fn do_enable_module(module_dir: &str, mid: &str, enable: bool) -> Result<()> {
                 format!("Failed to remove disable file: {}", &disable_path.display())
             })?;
         }
-    } else if !disable_path.exists() {
-        std::fs::File::create(disable_path)?;
+    } else {
+        ensure_file_exists(disable_path)?;
     }
 
     let _ = mark_module_state(mid, defs::DISABLE_FILE_NAME, !enable);
