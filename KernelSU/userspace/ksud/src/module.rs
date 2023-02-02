@@ -1,15 +1,13 @@
 use crate::{
-    defs,
+    assets, defs, mount,
     restorecon::{restore_syscon, setsyscon},
     sepolicy,
     utils::*,
-    assets,
-    mount,
 };
 
 use const_format::concatcp;
 use java_properties::PropertiesIter;
-use log::{info, warn};
+use log::{debug, info, warn};
 use std::{
     collections::HashMap,
     env::var as env_var,
@@ -112,8 +110,8 @@ fn check_image(img: &str) -> Result<()> {
 }
 
 fn grow_image_size(img: &str, extra_size: u64) -> Result<()> {
-    let minimal_size = get_minimal_image_size(img)?;
-    let target_size = minimal_size + extra_size;
+    let minimal_size = get_minimal_image_size(img)?; // the minimal size is in KB
+    let target_size = minimal_size * 1024 + extra_size;
 
     // check image
     check_image(img)?;
@@ -204,7 +202,7 @@ pub fn exec_post_fs_data() -> Result<()> {
         let path = entry.path();
         let disabled = path.join(defs::DISABLE_FILE_NAME);
         if disabled.exists() {
-            println!("{} is disabled, skip", path.display());
+            warn!("{} is disabled, skip", path.display());
             continue;
         }
 
@@ -212,14 +210,19 @@ pub fn exec_post_fs_data() -> Result<()> {
         if !post_fs_data.exists() {
             continue;
         }
-        println!("exec {} post-fs-data.sh", path.display());
+        info!("exec {} post-fs-data.sh", path.display());
 
         let mut command_new;
         let mut command;
-        if is_executable(&post_fs_data) {
+        if !is_executable(&post_fs_data) {
+            debug!(
+                "{} is not executable, use /system/bin/sh!",
+                post_fs_data.display()
+            );
             command_new = Command::new("sh");
             command = command_new.arg(&post_fs_data);
         } else {
+            debug!("{} is executable, exec directly!", post_fs_data.display());
             command_new = Command::new(&post_fs_data);
             command = &mut command_new;
         };
@@ -247,6 +250,59 @@ pub fn exec_post_fs_data() -> Result<()> {
     Ok(())
 }
 
+pub fn exec_common_scripts(dir: &str, wait: bool) -> Result<()> {
+    let script_dir = Path::new(defs::WORKING_DIR).join(dir);
+    if !script_dir.exists() {
+        info!("{} not exists, skip", script_dir.display());
+        return Ok(());
+    }
+
+    let dir = std::fs::read_dir(&script_dir)?;
+    for entry in dir.flatten() {
+        let path = entry.path();
+        if !path.ends_with(".sh") {
+            warn!("{} is not a shell script, skip", path.display());
+            continue;
+        }
+
+        if !is_executable(&path) {
+            warn!("{} is not executable, skip", path.display());
+            continue;
+        }
+
+        info!("exec {}", path.display());
+
+        let mut command = Command::new(&path);
+        let command = command
+            .process_group(0)
+            .current_dir(&script_dir)
+            .env(
+                "PATH",
+                format!("{}:{}", env_var("PATH").unwrap(), defs::BINARY_DIR),
+            )
+            .env("KSU", "true");
+
+        let command = unsafe {
+            command.pre_exec(|| {
+                switch_cgroups();
+                Ok(())
+            })
+        };
+
+        if !wait {
+            command
+                .spawn() // don't wait
+                .with_context(|| format!("Failed to exec {}", path.display()))?;
+        } else {
+            command
+                .status()
+                .with_context(|| format!("Failed to exec {}", path.display()))?;
+        }
+    }
+
+    Ok(())
+}
+
 /// execute every modules' service.sh
 pub fn exec_services() -> Result<()> {
     let modules_dir = Path::new(defs::MODULE_DIR);
@@ -255,7 +311,7 @@ pub fn exec_services() -> Result<()> {
         let path = entry.path();
         let disabled = path.join(defs::DISABLE_FILE_NAME);
         if disabled.exists() {
-            println!("{} is disabled, skip", path.display());
+            warn!("{} is disabled, skip", path.display());
             continue;
         }
 
@@ -263,14 +319,19 @@ pub fn exec_services() -> Result<()> {
         if !service.exists() {
             continue;
         }
-        println!("exec {} service.sh", path.display());
+        info!("exec {} service.sh", path.display());
 
         let mut command_new;
         let mut command;
-        if is_executable(&service) {
+        if !is_executable(&service) {
+            debug!(
+                "{} is not executable, use /system/bin/sh!",
+                service.display()
+            );
             command_new = Command::new("sh");
             command = command_new.arg(&service);
         } else {
+            debug!("{} is executable, exec directly!", service.display());
             command_new = Command::new(&service);
             command = &mut command_new;
         };
@@ -298,14 +359,13 @@ pub fn exec_services() -> Result<()> {
 }
 
 pub fn load_system_prop() -> Result<()> {
-
     let modules_dir = Path::new(defs::MODULE_DIR);
     let dir = std::fs::read_dir(modules_dir)?;
     for entry in dir.flatten() {
         let path = entry.path();
         let disabled = path.join(defs::DISABLE_FILE_NAME);
         if disabled.exists() {
-            println!("{} is disabled, skip", path.display());
+            info!("{} is disabled, skip", path.display());
             continue;
         }
 
@@ -313,7 +373,7 @@ pub fn load_system_prop() -> Result<()> {
         if !system_prop.exists() {
             continue;
         }
-        println!("load {} system.prop", path.display());
+        info!("load {} system.prop", path.display());
 
         // resetprop -n --file system.prop
         Command::new(assets::RESETPROP_PATH)
@@ -351,11 +411,11 @@ fn do_install_module(zip: String) -> Result<()> {
             module_prop.insert(k, v);
         },
     )?;
+    info!("module prop: {:?}", module_prop);
 
     let Some(module_id) = module_prop.get("id") else {
         bail!("module id not found in module.prop!");
     };
-    info!("module id: {}", module_id);
 
     let modules_img = Path::new(defs::MODULE_IMG);
     let modules_update_img = Path::new(defs::MODULE_UPDATE_IMG);
@@ -375,6 +435,9 @@ fn do_install_module(zip: String) -> Result<()> {
     let zip_uncompressed_size = get_zip_uncompressed_size(&zip)?;
     let grow_size = default_reserve_size + zip_uncompressed_size;
 
+    info!("zip uncompressed size: {}", humansize::format_size(zip_uncompressed_size, humansize::DECIMAL));
+    info!("grow size: {}", humansize::format_size(grow_size, humansize::DECIMAL));
+
     println!("- Preparing image");
     println!(
         "- Module size: {}",
@@ -384,6 +447,7 @@ fn do_install_module(zip: String) -> Result<()> {
     if !modules_img_exist && !modules_update_img_exist {
         // if no modules and modules_update, it is brand new installation, we should create a new img
         // create a tmp module img and mount it to modules_update
+        info!("Creating brand new module image");
         File::create(tmp_module_img)
             .context("Failed to create ext4 image file")?
             .set_len(grow_size)
@@ -403,6 +467,7 @@ fn do_install_module(zip: String) -> Result<()> {
         check_image(tmp_module_img)?;
     } else if modules_update_img_exist {
         // modules_update.img exists, we should use it as tmp img
+        info!("Using existing modules_update.img as tmp image");
         std::fs::copy(modules_update_img, tmp_module_img).with_context(|| {
             format!(
                 "Failed to copy {} to {}",
@@ -414,6 +479,7 @@ fn do_install_module(zip: String) -> Result<()> {
         grow_image_size(tmp_module_img, grow_size)?;
     } else {
         // modules.img exists, we should use it as tmp img
+        info!("Using existing modules.img as tmp image");
         std::fs::copy(modules_img, tmp_module_img).with_context(|| {
             format!(
                 "Failed to copy {} to {}",
@@ -471,13 +537,14 @@ fn do_install_module(zip: String) -> Result<()> {
     Ok(())
 }
 
-pub fn install_module(zip: String) -> Result<()> { 
+pub fn install_module(zip: String) -> Result<()> {
     let result = do_install_module(zip);
-    if result.is_err() {
+    if let Err(ref e) = result {
         // error happened, do some cleanup!
         let _ = std::fs::remove_file(defs::MODULE_UPDATE_TMP_IMG);
         let _ = mount::umount_dir(defs::MODULE_UPDATE_TMP_DIR);
         let _ = std::fs::remove_dir_all(defs::MODULE_UPDATE_TMP_DIR);
+        println!("- Error: {e}");
     }
     result
 }
@@ -532,9 +599,7 @@ where
 pub fn uninstall_module(id: String) -> Result<()> {
     do_module_update(defs::MODULE_UPDATE_TMP_DIR, &id, |mid, update_dir| {
         let dir = Path::new(update_dir);
-        if !dir.exists() {
-            bail!("No module installed");
-        }
+        ensure!(dir.exists(), "No module installed");
 
         // iterate the modules_update dir, find the module to be removed
         let dir = std::fs::read_dir(dir)?;
@@ -574,9 +639,7 @@ pub fn uninstall_module(id: String) -> Result<()> {
 fn do_enable_module(module_dir: &str, mid: &str, enable: bool) -> Result<()> {
     let src_module_path = format!("{module_dir}/{mid}");
     let src_module = Path::new(&src_module_path);
-    if !src_module.exists() {
-        bail!("module: {} not found!", mid);
-    }
+    ensure!(src_module.exists(), "module: {} not found!", mid);
 
     let disable_path = src_module.join(defs::DISABLE_FILE_NAME);
     if enable {
