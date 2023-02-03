@@ -345,7 +345,7 @@ impl<'a> PolicyStatement<'a> {
     }
 }
 
-fn parse_sepolicy<'a, 'b>(input: &'b str) -> Result<Vec<PolicyStatement<'a>>>
+fn parse_sepolicy<'a, 'b>(input: &'b str) -> Vec<PolicyStatement<'a>>
 where
     'b: 'a,
 {
@@ -356,7 +356,7 @@ where
             statements.push(statement);
         }
     }
-    Ok(statements)
+    statements
 }
 
 const SEPOLICY_MAX_LEN: usize = 128;
@@ -401,6 +401,7 @@ impl TryFrom<&str> for PolicyObject {
 /// normal statement would be expand to atomic statement, for example:
 /// allow domain1 domain2:file1 { read write }; would be expand to two atomic statement
 /// allow domain1 domain2:file1 read;allow domain1 domain2:file1 write;
+#[allow(clippy::too_many_arguments)]
 #[derive(Debug, new)]
 struct AtomicStatement {
     cmd: u32,
@@ -552,8 +553,7 @@ impl<'a> TryFrom<&'a TypeAttr<'a>> for Vec<AtomicStatement> {
 impl<'a> TryFrom<&'a Attr<'a>> for Vec<AtomicStatement> {
     type Error = anyhow::Error;
     fn try_from(perm: &'a Attr<'a>) -> Result<Self> {
-        let mut result = vec![];
-        result.push(AtomicStatement {
+        let result = vec![AtomicStatement {
             cmd: CMD_ATTR,
             subcmd: 0,
             sepol1: perm.name.try_into()?,
@@ -563,7 +563,7 @@ impl<'a> TryFrom<&'a Attr<'a>> for Vec<AtomicStatement> {
             sepol5: PolicyObject::None,
             sepol6: PolicyObject::None,
             sepol7: PolicyObject::None,
-        });
+        }];
         Ok(result)
     }
 }
@@ -670,9 +670,8 @@ struct FfiPolicy {
 
 fn to_c_ptr(pol: &PolicyObject) -> *const libc::c_char {
     match pol {
-        PolicyObject::None => std::ptr::null(),
-        PolicyObject::All => std::ptr::null(),
-        PolicyObject::One(s) => s.as_ptr() as *const libc::c_char,
+        PolicyObject::None | PolicyObject::All => std::ptr::null(),
+        PolicyObject::One(s) => s.as_ptr().cast::<libc::c_char>(),
     }
 }
 
@@ -692,41 +691,45 @@ impl From<AtomicStatement> for FfiPolicy {
     }
 }
 
-#[cfg(target_os = "android")]
-fn apply_one_rule<'a>(statement: &'a PolicyStatement<'a>) -> Result<()> {
+#[cfg(unix)]
+fn apply_one_rule<'a>(statement: &'a PolicyStatement<'a>, strict: bool) -> Result<()> {
     let policies: Vec<AtomicStatement> = statement.try_into()?;
 
     for policy in policies {
         let mut result: u32 = 0;
         let cpolicy = FfiPolicy::from(policy);
         unsafe {
+            #[allow(clippy::cast_possible_wrap)]
             libc::prctl(
-                crate::ksu::KERNEL_SU_OPTION as i32,
+                crate::ksu::KERNEL_SU_OPTION as i32, // supposed to overflow
                 crate::ksu::CMD_SET_SEPOLICY,
                 0,
-                &cpolicy as *const _ as *const libc::c_void,
-                &mut result as *mut _ as *mut libc::c_void,
+                std::ptr::addr_of!(cpolicy).cast::<libc::c_void>(),
+                std::ptr::addr_of_mut!(result).cast::<libc::c_void>(),
             );
         }
 
         if result != crate::ksu::KERNEL_SU_OPTION {
-            log::warn!("apply rule failed: {result}");
+            log::warn!("apply rule: {:?} failed.", statement);
+            if strict {
+                return Err(anyhow::anyhow!("apply rule {:?} failed.", statement));
+            }
         }
     }
 
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
-fn apply_one_rule<'a>(_statement: &'a PolicyStatement<'a>) -> Result<()> {
+#[cfg(not(unix))]
+fn apply_one_rule<'a>(_statement: &'a PolicyStatement<'a>, _strict: bool) -> Result<()> {
     unimplemented!()
 }
 
 pub fn live_patch(policy: &str) -> Result<()> {
-    let result = parse_sepolicy(policy.trim())?;
+    let result = parse_sepolicy(policy.trim());
     for statement in result {
         println!("{statement:?}");
-        apply_one_rule(&statement)?;
+        apply_one_rule(&statement, false)?;
     }
     Ok(())
 }
@@ -734,4 +737,12 @@ pub fn live_patch(policy: &str) -> Result<()> {
 pub fn apply_file<P: AsRef<Path>>(path: P) -> Result<()> {
     let input = std::fs::read_to_string(path)?;
     live_patch(&input)
+}
+
+pub fn check_rule(policy: &str) -> Result<()> {
+    let result = parse_sepolicy(policy.trim());
+    for statement in result {
+        apply_one_rule(&statement, true)?;
+    }
+    Ok(())
 }
