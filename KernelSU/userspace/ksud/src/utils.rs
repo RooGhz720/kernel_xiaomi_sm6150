@@ -63,12 +63,12 @@ pub fn ensure_binary<T: AsRef<Path>>(path: T, contents: &[u8]) -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn getprop(prop: &str) -> Option<String> {
     android_properties::getprop(prop).value()
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn getprop(_prop: &str) -> Option<String> {
     unimplemented!()
 }
