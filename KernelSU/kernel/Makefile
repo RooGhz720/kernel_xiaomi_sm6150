@@ -13,7 +13,6 @@ obj-y += kernel_compat.o
 
 obj-y += selinux/
 
-ifeq ($(shell test -d $(srctree)/$(src)/../.git; echo $$?),0)
 # We must use the absolute path to git, otherwise the build will fail if git is not in the PATH
 KSU_GIT_VERSION := $(shell cd $(srctree)/$(src);/usr/bin/git rev-list --count HEAD)
 ifeq ($(KSU_GIT_VERSION),)
