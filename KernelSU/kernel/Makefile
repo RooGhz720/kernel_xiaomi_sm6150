@@ -16,7 +16,11 @@ obj-y += selinux/
 ifeq ($(shell test -d $(srctree)/$(src)/../.git; echo $$?),0)
 # We must use the absolute path to git, otherwise the build will fail if git is not in the PATH
 KSU_GIT_VERSION := $(shell cd $(srctree)/$(src);/usr/bin/git rev-list --count HEAD)
-ccflags-y += -DKSU_GIT_VERSION=$(KSU_GIT_VERSION)
+ifeq ($(KSU_GIT_VERSION),)
+$(error Get git version failed, please make sure git is installed in /usr/bin/git)
+endif
+ifeq ($(shell test $(KSU_GIT_VERSION) -gt 10000; echo $$?),0)
+$(error The way you configure KernelSU is wrong, please use submodule and make sure it is a single git repo)
 endif
 
 ifndef EXPECTED_SIZE
