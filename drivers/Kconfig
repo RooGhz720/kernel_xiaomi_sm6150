@@ -5,8 +5,6 @@ source "drivers/aircrack/rtl8812au/Kconfig"
 
 source "drivers/aircrack/rtl8188eus/Kconfig"
 
-source "drivers/aircrack/rtl8188fu/Kconfig"
-
 source "drivers/aircrack/rtl8192eu/Kconfig"
 
 source "drivers/amba/Kconfig"
