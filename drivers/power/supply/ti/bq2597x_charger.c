@@ -172,16 +172,16 @@ enum hvdcp3_type {
 	HVDCP3P5_CLASSB_27W,
 };
 
-#define BUS_OVP_FOR_QC			10000
-#define BUS_OVP_ALARM_FOR_QC			9500
-#define BUS_OCP_FOR_QC_CLASS_A			3250
-#define BUS_OCP_ALARM_FOR_QC_CLASS_A			2000
-#define BUS_OCP_FOR_QC_CLASS_B			3750
-#define BUS_OCP_ALARM_FOR_QC_CLASS_B			2800
-#define BUS_OCP_FOR_QC3P5_CLASS_A			3000
-#define BUS_OCP_ALARM_FOR_QC3P5_CLASS_A		2500
-#define BUS_OCP_FOR_QC3P5_CLASS_B			3500
-#define BUS_OCP_ALARM_FOR_QC3P5_CLASS_B		3200
+#define BUS_OVP_FOR_QC			60000
+#define BUS_OVP_ALARM_FOR_QC			95000
+#define BUS_OCP_FOR_QC_CLASS_A			12500
+#define BUS_OCP_ALARM_FOR_QC_CLASS_A			20000
+#define BUS_OCP_FOR_QC_CLASS_B			9750
+#define BUS_OCP_ALARM_FOR_QC_CLASS_B			9800
+#define BUS_OCP_FOR_QC3P5_CLASS_A			9000
+#define BUS_OCP_ALARM_FOR_QC3P5_CLASS_A		8500
+#define BUS_OCP_FOR_QC3P5_CLASS_B			9500
+#define BUS_OCP_ALARM_FOR_QC3P5_CLASS_B		9200
 
 /*end*/
 
@@ -2471,7 +2471,7 @@ static const struct i2c_device_id bq2597x_charger_id[] = {
 
 static struct i2c_driver bq2597x_charger_driver = {
 	.driver		= {
-		.name	= "bq2597x-charger",
+		.name	= "bq2597x~CURSED",
 		.owner	= THIS_MODULE,
 		.of_match_table = bq2597x_charger_match_table,
 		.pm	= &bq2597x_pm_ops,
