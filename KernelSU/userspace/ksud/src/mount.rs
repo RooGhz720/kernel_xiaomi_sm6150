@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use anyhow::{Context, Ok};
+use anyhow::Context;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use retry::delay::NoDelay;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -250,5 +250,94 @@ impl StockOverlay {
             let result = umount_dir(p);
             log::info!("stock umount {}: {:?}", p, result);
         }
+    }
+}
+
+// some ROMs mount device(ext4,exfat) to /vendor, when we do overlay mount, it will overlay
+// the stock mounts, these mounts include bt_firmware, wifi_firmware, etc.
+// so we to remount these mounts when we do overlay mount.
+// this is a workaround, we should find a better way to do this.
+#[derive(Debug)]
+pub struct StockMount {
+    mnt: String,
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    mountlist: proc_mounts::MountList,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl StockMount {
+    pub fn new(mnt: &str) -> Result<Self> {
+        let mountlist = proc_mounts::MountList::new()?;
+        Ok(Self {
+            mnt: mnt.to_string(),
+            mountlist,
+        })
+    }
+
+    fn get_target_mounts(&self) -> Vec<&proc_mounts::MountInfo> {
+        let mounts = self
+            .mountlist
+            .destination_starts_with(&std::path::Path::new(&self.mnt))
+            .filter(|m| m.fstype != "overlay");
+        mounts.collect()
+    }
+
+    pub fn umount(&self) -> Result<()> {
+        let mounts = self.get_target_mounts();
+        log::info!("stock mount for {} : {:?}", self.mnt, mounts);
+        for m in mounts {
+            let dst = m
+                .dest
+                .to_str()
+                .ok_or(anyhow::anyhow!("Failed to get dst"))?;
+            umount_dir(dst)?;
+            log::info!("umount: {:?}", m);
+        }
+        Ok(())
+    }
+
+    pub fn remount(&self) -> Result<()> {
+        let mounts = self.get_target_mounts();
+        for m in mounts {
+            let src = std::fs::canonicalize(&m.source)?;
+
+            let src = src.to_str().ok_or(anyhow::anyhow!("Failed to get src"))?;
+            let dst = m
+                .dest
+                .to_str()
+                .ok_or(anyhow::anyhow!("Failed to get dst"))?;
+
+            let fstype = m.fstype.as_str();
+            let options = m.options.join(",");
+
+            log::info!("mount: {:?}", m);
+            std::process::Command::new("mount")
+                .arg("-t")
+                .arg(fstype)
+                .arg("-o")
+                .arg(options)
+                .arg(src)
+                .arg(dst)
+                .status()
+                .with_context(|| format!("Failed to mount {:?}", m))?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+impl StockMount {
+    pub fn new(mnt: &str) -> Result<Self> {
+        Ok(Self {
+            mnt: mnt.to_string(),
+        })
+    }
+
+    pub fn umount(&self) -> Result<()> {
+        unimplemented!()
+    }
+
+    pub fn remount(&self) -> Result<()> {
+        unimplemented!()
     }
 }

@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::Path};
 
 use crate::{
     assets, defs, mount,
-    utils::{ensure_clean_dir, ensure_dir_exists},
+    utils::{self, ensure_clean_dir, ensure_dir_exists},
 };
 
 fn mount_partition(partition: &str, lowerdir: &mut Vec<String>) -> Result<()> {
@@ -18,6 +18,19 @@ fn mount_partition(partition: &str, lowerdir: &mut Vec<String>) -> Result<()> {
         warn!("partition: {partition} is a symlink");
         return Ok(());
     }
+
+    // handle stock mounts under /partition, we should restore the mount point after overlay
+    let stock_mount = mount::StockMount::new(&format!("/{partition}/"))
+        .with_context(|| format!("get stock mount of partition: {partition} failed"))?;
+    let result = stock_mount.umount();
+    if result.is_err() {
+        let remount_result = stock_mount.remount();
+        if remount_result.is_err() {
+            log::error!("remount stock mount of failed: {:?}", remount_result);
+        }
+        bail!("umount stock mount of failed: {:?}", result);
+    }
+
     // add /partition as the lowerest dir
     let lowest_dir = format!("/{partition}");
     lowerdir.push(lowest_dir.clone());
@@ -25,7 +38,17 @@ fn mount_partition(partition: &str, lowerdir: &mut Vec<String>) -> Result<()> {
     let lowerdir = lowerdir.join(":");
     info!("partition: {partition} lowerdir: {lowerdir}");
 
-    mount::mount_overlay(&lowerdir, &lowest_dir)
+    let result = mount::mount_overlay(&lowerdir, &lowest_dir);
+
+    if result.is_ok() && stock_mount.remount().is_err() {
+        // if mount overlay ok but stock remount failed, we should umount overlay
+        warn!("remount stock mount of failed, umount overlay {lowest_dir} now");
+        if mount::umount_dir(&lowest_dir).is_err() {
+            warn!("umount overlay {lowest_dir} failed");
+        }
+    }
+
+    result
 }
 
 pub fn mount_systemlessly(module_dir: &str) -> Result<()> {
@@ -89,6 +112,9 @@ pub fn mount_systemlessly(module_dir: &str) -> Result<()> {
 
 pub fn on_post_data_fs() -> Result<()> {
     crate::ksu::report_post_fs_data();
+
+    utils::umask(0);
+
     let module_update_img = defs::MODULE_UPDATE_IMG;
     let module_img = defs::MODULE_IMG;
     let module_dir = defs::MODULE_DIR;
@@ -173,6 +199,8 @@ pub fn on_post_data_fs() -> Result<()> {
 }
 
 pub fn on_services() -> Result<()> {
+    utils::umask(0);
+
     // check safe mode first.
     if crate::utils::is_safe_mode() {
         warn!("safe mode, skip module service scripts");
