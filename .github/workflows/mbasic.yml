@@ -1,0 +1,32 @@
+name: Aghisna MIUI Basic
+on:
+  workflow_dispatch:
+
+jobs:
+   build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: setting configurasi
+      uses: actions/checkout@v3
+
+    - name: setup environment
+      run: |
+          sudo apt-get update --fix-missing
+          sudo apt-get install git make bc bison \
+          openssl curl zip kmod cpio flex libelf-dev \
+          libssl-dev libtfm-dev wget device-tree-compiler \
+          ca-certificates python3 python2 binutils \
+          binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
+          libghc-libyaml-dev libyaml-dev glibc-source \
+    - name: ready compile...
+      run: |
+          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/nonrx/miui-noln8k.sh > noln8k.sh
+          chmod +x noln8k.sh
+          bash noln8k.sh
+      shell: bash
+      env:
+         CHATID: ${{ secrets.CHAT_ID }}
+         API_BOT: ${{ secrets.BOT_API }}
+         TYPE_KERNEL: ${{ secrets.EZA }}
+
