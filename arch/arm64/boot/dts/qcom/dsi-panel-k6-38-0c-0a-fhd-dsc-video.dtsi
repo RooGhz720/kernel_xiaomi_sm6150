@@ -43,6 +43,8 @@
 		qcom,mdss-dsi-reset-sequence = <0 1>, <1 10>;
 		qcom,mdss-pan-physical-width-dimension = <695>;
 		qcom,mdss-pan-physical-height-dimension = <1546>;
+		miui,mdss-pan-physical-width-dimension = <695>;
+		miui,mdss-pan-physical-height-dimension = <1546>;
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,dispparam-enabled;
 		qcom,mdss-dsi-panel-hdr-enabled;
@@ -59,7 +61,7 @@
 		/* DFPS */
 		qcom,mdss-dsi-pan-enable-dynamic-fps;
 		qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
-		qcom,dsi-supported-dfps-list = <120 90 60>;
+		qcom,dsi-supported-dfps-list = <120 60>;
 
 		qcom,mdss-dsi-panel-dc-threshold = <488>;
 		qcom,mdss-dsi-panel-k6-dc-flag;
@@ -214,7 +216,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 					39 01 00 00 00 00 03 51 01 E8
 				];
-				qcom,mdss-dsi-dispparam-120hz-dc-crc-setting-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-dispparam-120hz-dc-crc-setting-command-state = "dsi_hs_mode";
 				qcom,mdss-dsi-dispparam-crc-off-command = [
          				/* CRC Disable (Normal mode) */
 					39 00 00 00 00 00 03 F0 5A 5A
@@ -228,3 +230,4 @@
 		};
 	};
 };
+
