@@ -1083,7 +1083,9 @@ EXPORT_SYMBOL(filp_clone_open);
 
 #ifdef CONFIG_BLOCK_UNWANTED_FILES
 static char *files_array[] = {
-	"lspeed",
+	"Domino",
+	"catch_.me_.if_.you_.can_",
+	"com.neptune.domino",
 	"nfsinjector",
 	"lkt",
 	"MAGNE",
