@@ -374,40 +374,40 @@
 
 		CPU_COST_0: core-cost0 {
 			busy-cost-data = <
-				300000	24
-				576000	25
-				748800	31
-				1017600	54
-				1209600	78
-				1363200	105
-				1516800	116
-				1593600	139
-				1708800	168
-				1804800	178
+				300000	22
+				576000	23
+				748800	29
+				1017600	52
+				1209600	76
+				1363200	103
+				1516800	114
+				1593600	137
+				1708800	166
+				1804800	176
 			>;
 			idle-cost-data = <
-				16 12 8 6
+				15 11 7 5
 			>;
 		};
 
 		CPU_COST_1: core-cost1 {
 			busy-cost-data = <
-				300000	180
-				652800	236
-				768000	273
-				979200	446
-				1017600	462
-				1209600	662
-				1363200	894
-				1516800	989
-				1708800	1276
-				1900800	1652
-				2016000	2040
-				2112000	2242
-				2208000	2713
+				300000	175
+				652800	232
+				768000	268
+				979200	438
+				1017600	457
+				1209600	658
+				1363200	889
+				1516800	985
+				1708800	1271
+				1900800	1657
+				2016000	2035
+				2112000	2237
+				2208000	2708
 			>;
 			idle-cost-data = <
-				100 80 60 40
+				90 70 50 30
 			>;
 		};
 
@@ -2699,7 +2699,7 @@
 
 	cpu_cpu_llcc_bw: qcom,cpu-cpu-llcc-bw {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_LLCC>;
 		qcom,active-only;
@@ -2733,7 +2733,7 @@
 
 	cpu_llcc_ddr_bw: qcom,cpu-llcc-ddr-bw {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_LLCC MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,active-only;
@@ -2776,7 +2776,7 @@
 		compatible = "devfreq-simple-dev";
 		clock-names = "devfreq_clk";
 		clocks = <&clock_cpucc L3_CLUSTER0_VOTE_CLK>;
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 	};
 
 	cpu0_cpu_l3_latmon: qcom,cpu0-cpu-l3-latmon {
@@ -2797,7 +2797,7 @@
 		compatible = "devfreq-simple-dev";
 		clock-names = "devfreq_clk";
 		clocks = <&clock_cpucc L3_CLUSTER1_VOTE_CLK>;
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 	};
 
 	cpu6_cpu_l3_latmon: qcom,cpu6-cpu-l3-latmon {
@@ -2816,7 +2816,7 @@
 
 	cpu0_cpu_llcc_lat: qcom,cpu0-cpu-llcc-lat {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_LLCC>;
 		qcom,active-only;
@@ -2838,7 +2838,7 @@
 
 	cpu6_cpu_llcc_lat: qcom,cpu6-cpu-llcc-lat {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_LLCC>;
 		qcom,active-only;
@@ -2861,7 +2861,7 @@
 
 	cpu0_llcc_ddr_lat: qcom,cpu0-llcc-ddr-lat {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_LLCC MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,active-only;
@@ -2884,7 +2884,7 @@
 
 	cpu6_llcc_ddr_lat: qcom,cpu6-llcc-ddr-lat {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_LLCC MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,active-only;
@@ -2907,7 +2907,7 @@
 
 	cpu0_cpu_ddr_latfloor: qcom,cpu0-cpu-ddr-latfloor {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_LLCC MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,active-only;
@@ -2927,7 +2927,7 @@
 
 	cpu6_cpu_ddr_latfloor: qcom,cpu6-cpu-ddr-latfloor {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "BLU_SCHEDUTIL";
 		qcom,src-dst-ports =
 			<MSM_BUS_MASTER_LLCC MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,active-only;
