@@ -43,8 +43,6 @@
 		qcom,mdss-dsi-reset-sequence = <0 1>, <1 10>;
 		qcom,mdss-pan-physical-width-dimension = <695>;
 		qcom,mdss-pan-physical-height-dimension = <1546>;
-		miui,mdss-pan-physical-width-dimension = <695>;
-		miui,mdss-pan-physical-height-dimension = <1546>;
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,dispparam-enabled;
 		qcom,mdss-dsi-panel-hdr-enabled;
