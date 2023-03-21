@@ -1,0 +1,83 @@
+name: hyperion oss
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cloning bahan-bahan
+        run: |
+          git clone --depth=1 https://github.com/radcolor/aarch64-linux-gnu.git -b master  GCC
+          git clone --depth=1 https://github.com/radcolor/arm-linux-gnueabi.git -b master  GCC32
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git -b master  CLANG_DIR
+          git clone --depth=1 https://github.com/RooGhz720/Anykernel3.git -b hyper hyper
+
+      - name: Set up kernul
+        run: |
+          DIR="${PWD}"
+          ARCH="arm64"
+          SUBARCH="arm64"
+          export ARCH SUBARCH
+          export CROSS_COMPILE=$DIR/GCC/bin/aarch64-linux-android-
+          export CROSS_COMPILE_ARM32=$DIR/GCC32/bin/arm-linux-androideabi-
+          export KBUILD_BUILD_USER=RooGhz720
+          export KBUILD_BUILD_HOST=MyLabs
+          PATH=$DIR/CLANG_DIR/bin:$DIR/GCC32/bin:$DIR/GCC/bin:${PATH}
+          KERNEL_IMG=$DIR/out/arch/$ARCH/boot/Image.gz-dtb
+          KERNEL_DTBO=$DIR/out/arch/$ARCH/boot/dtbo.img
+          KERNEL_DTB=$DIR/out/arch/$ARCH/boot/dtb.img
+          [[ ! -d out ]] && mkdir out
+          [[ -f "$KERNEL_IMG" ]] && rm "$KERNEL_IMG"
+          find . -name "*.dtb" -type f -delete
+
+      - name: Send infone maseh to telegram
+        run: |
+          curl -s "https://api.telegram.org/bot${{secrets.BOT_API}}/sendMessage" \
+              -F parse_mode=markdown \
+              -F disable_web_page_preview=true \
+              -F text="Compile dimulai for Redmi Note 10 Pro Sweet" \
+              -F chat_id=${{secrets.CHAT_ID}} &> /dev/null
+
+      - name: Compile
+        run: |
+          make O=out sweet-perf_defconfig -j$(nproc --all)
+          BUILD_START=$(date +"%s")
+          make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 AR=llvm-ar NM=llvm-nm LD=ld.lld OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1 | tee error.log
+          BUILD_END=$(date +"%s")
+          DIFF=$((BUILD_END - BUILD_START))
+          if ! [ -a "$KERNEL_IMG" ]; then
+            echo -e "\n> Build failed"
+            curl -F document=@"error.log"  "https://api.telegram.org/bot${{secrets.BOT_API}}/sendDocument" \
+            -F caption="
+            *Kernel Compiling Failed !!*
+            Time Taken: $((DIFF / 60))m $((DIFF % 60))s
+            " \
+            -F chat_id=${{secrets.CHAT_ID}} \
+            -F parse_mode=markdown &> /dev/null
+            exit 1
+          fi
+
+      - name: Packing kernul
+        run: |
+          cd $DIR/hyper
+          git clean -fd
+          mv "$KERNEL_IMG" $DIR/hyper/Image.gz-dtb
+          mv "$KERNEL_DTBO" $DIR/hyper/dtbo.img
+          mv "$KERNEL_DTB" $DIR/hyper/dtb.img
+          ZIP_NAME=Hyperion-v3-$(date +%d-%m-%Y).zip
+
+      - name: Send kernul to telegram
+        run: |
+          COMMIT=$(git log --pretty=format:"%s" -1)
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          zip -r9 "$ZIP_NAME" ./* -x .git README.md ./*placeholder
+          echo -e "\n> ZIP DONE.\n> File: $ZIP_NAME"
+          curl -F document=@"$ZIP_NAME"  "https://api.telegram.org/bot${{ secrets.BOT_API }}/sendDocument" \
+            -F caption="
+            HEAD: $COMMIT_SHA: $COMMIT
+            " \
+            -F chat_id=${{secrets.CHAT_ID}} \
+            -F parse_mode=markdown &> /dev/null
+
