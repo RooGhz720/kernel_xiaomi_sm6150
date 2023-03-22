@@ -19,7 +19,6 @@ jobs:
       
       - name: Cloning bahan-bahan
         run: |
-          git clone https://github.com/RooGhz720/Anykernel3.git -b hyper ak3
           git clone --depth=1 https://github.com/radcolor/aarch64-linux-gnu.git -b master  GCC
           git clone --depth=1 https://github.com/radcolor/arm-linux-gnueabi.git -b master  GCC32
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git -b master  CLANG_DIR
@@ -60,6 +59,7 @@ jobs:
       - name: Packing kernul
         run: |
           DIR="${PWD}"
+          git clone -b hyper https://github.com/RooGhz720/Anykernel3.git ak3
           cd $DIR/ak3
           git clean -fd
           mv "$KERNEL_IMG" $DIR/ak3/Image.gz-dtb
