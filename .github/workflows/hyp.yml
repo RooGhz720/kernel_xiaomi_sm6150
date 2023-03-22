@@ -4,16 +4,9 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
-      - name: Cloning bahan-bahan
-        run: |
-          git clone --depth=1 https://github.com/radcolor/aarch64-linux-gnu.git -b master  GCC
-          git clone --depth=1 https://github.com/radcolor/arm-linux-gnueabi.git -b master  GCC32
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git -b master  CLANG_DIR
-          git clone --depth=1 https://github.com/RooGhz720/Anykernel3.git -b hyper hyper
-
       - name: setup environment
         run: |
           sudo apt-get update --fix-missing
@@ -22,7 +15,14 @@ jobs:
           libssl-dev libtfm-dev wget device-tree-compiler \
           ca-certificates python3 python2 binutils \
           binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
-          libghc-libyaml-dev libyaml-dev glibc-source \
+          libghc-libyaml-dev libyaml-dev glibc-source lld \
+      
+      - name: Cloning bahan-bahan
+        run: |
+          git clone --depth=1 https://github.com/radcolor/aarch64-linux-gnu.git -b master  GCC
+          git clone --depth=1 https://github.com/radcolor/arm-linux-gnueabi.git -b master  GCC32
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git -b master  CLANG_DIR
+          git clone --depth=1 https://github.com/RooGhz720/Anykernel3.git -b hyper hyper
 
       - name: Set up kernul
         run: |
@@ -49,6 +49,7 @@ jobs:
 
       - name: Compile
         run: |
+          mkdir out
           make O=out clean
           make O=out mrproper
           make O=out sweet-perf_defconfig
