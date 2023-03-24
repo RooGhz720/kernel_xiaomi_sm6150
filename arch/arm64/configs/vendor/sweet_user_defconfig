@@ -1594,7 +1594,6 @@ CONFIG_AUTO_KPROFILES_MSM_DRM=y
 #
 # FingerprintCard fingerprint driver
 #
-# CONFIG_FPR_FPC is not set
 # CONFIG_GPIO_TESTING_MODE is not set
 
 #
