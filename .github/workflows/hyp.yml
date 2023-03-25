@@ -21,7 +21,6 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/radcolor/aarch64-linux-gnu.git -b master  GCC
           git clone --depth=1 https://github.com/radcolor/arm-linux-gnueabi.git -b master  GCC32
-          git clone -b hyper https://github.com/RooGhz720/Anykernel3.git AK_DIR
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git -b master  CLANG_DIR
 
       - name: Set up kernul
@@ -52,9 +51,9 @@ jobs:
           make O=out sweet-perf_defconfig -j$(nproc --all)
           make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 AR=llvm-ar NM=llvm-nm LD=ld.lld OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1
           git clean -fd
-          mv "$KERNEL_IMG" $DIR/AK_DIR/Image.gz-dtb
-          mv "$KERNEL_DTBO" $DIR/AK_DIR/dtbo.img
-          mv "$KERNEL_DTB" $DIR/AK_DIR/dtb.img
+          mv "$KERNEL_IMG" $DIR/AK3/Image.gz-dtb
+          mv "$KERNEL_DTBO" $DIR/AK3/dtbo.img
+          mv "$KERNEL_DTB" $DIR/AK3/dtb.img
           ZIP_NAME=Hyperion-v3-$(date +%d-%m-%Y).zip
           zip -r9 "$ZIP_NAME" ./* -x .git README.md ./*placeholder
           

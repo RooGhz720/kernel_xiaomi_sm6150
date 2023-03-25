@@ -1,0 +1,42 @@
+Manifest-Version: 1.0
+Created-By: 1.0 (Android SignApk)
+
+Name: META-INF/com/google/android/updater-script
+SHA1-Digest: VZe4aHA+xCcH8JijDVgDZETDyNE=
+
+Name: Image.gz-dtb
+SHA1-Digest: CTbbrpvtj7Z+P+UNJQ2mBl0e/BA=
+
+Name: anykernel.sh
+SHA1-Digest: 0CGxBvT4d5bWIJZ+Dy2hCXMeUX4=
+
+Name: META-INF/com/google/android/update-binary
+SHA1-Digest: y8vRVZTREG9/PRCWRTDu6LfUXGg=
+
+Name: dtbo.img
+SHA1-Digest: YQodWjxuQCfCQFeINnKusoOLnpg=
+
+Name: tools/busybox
+SHA1-Digest: OPPNEy8hJbau5KydNUxvDmA5k+0=
+
+Name: tools/magiskpolicy
+SHA1-Digest: F70FsHRVnmvmWFA86ZW/gDavNk0=
+
+Name: tools/ak3-core.sh
+SHA1-Digest: Q0XpelKxEIgS73xR2Wmxfv7aBZE=
+
+Name: tools/magiskboot
+SHA1-Digest: q2yC3c1bZVNAHwNWoEQgSQ1PffU=
+
+Name: dtb.img
+SHA1-Digest: n1lUDbzCBWFf/xB0PNeerZLyw2E=
+
+Name: tools/lptools_static
+SHA1-Digest: ZLYs78Zir1u/w0VsDvZjjhopeXY=
+
+Name: tools/httools_static
+SHA1-Digest: NyRrmIORcH8sH8hTX4XAeGo8BOY=
+
+Name: tools/fec
+SHA1-Digest: QrCL4cGRR1fFEeur10viI2LePic=
+
