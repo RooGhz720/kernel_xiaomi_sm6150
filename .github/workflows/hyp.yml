@@ -35,9 +35,6 @@ jobs:
           export KBUILD_BUILD_USER=RooGhz720
           export KBUILD_BUILD_HOST=MyLabs
           PATH=$DIR/CLANG_DIR/bin:$DIR/GCC32/bin:$DIR/GCC/bin:${PATH}
-          KERNEL_IMG=$DIR/out/arch/$ARCH/boot/Image.gz-dtb
-          KERNEL_DTBO=$DIR/out/arch/$ARCH/boot/dtbo.img
-          KERNEL_DTB=$DIR/out/arch/$ARCH/boot/dtb.img
 
       - name: Send infone maseh to telegram
         run: |
@@ -49,6 +46,9 @@ jobs:
 
       - name: Compile
         run: |
+          KERNEL_IMG=$DIR/out/arch/$ARCH/boot/Image.gz-dtb
+          KERNEL_DTBO=$DIR/out/arch/$ARCH/boot/dtbo.img
+          KERNEL_DTB=$DIR/out/arch/$ARCH/boot/dtb.img
           make O=out sweet-perf_defconfig -j$(nproc --all)
           make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 AR=llvm-ar NM=llvm-nm LD=ld.lld OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1
           git clean -fd
