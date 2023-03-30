@@ -10,31 +10,8 @@ menuconfig INPUT_TOUCHSCREEN
 	  If unsure, say Y.
 
 if INPUT_TOUCHSCREEN
-source "drivers/input/touchscreen/nt36672c/Kconfig"
-source "drivers/input/touchscreen/goodix_driver_gt9886/Kconfig"
-source "drivers/input/touchscreen/f4_goodix_driver_gt9886/Kconfig"
-source "drivers/input/touchscreen/ft8719_touch_f7b/Kconfig"
-source "drivers/input/touchscreen/fts/Kconfig"
-source "drivers/input/touchscreen/fts_521/Kconfig"
-source "drivers/input/touchscreen/gt9897t/Kconfig"
-source "drivers/input/touchscreen/goodix_driver_gt9886/Kconfig"
-source "drivers/input/touchscreen/gt9896/Kconfig"
-source "drivers/input/touchscreen/nt36672c/Kconfig"
-source "drivers/input/touchscreen/nvt_touch_f7b/Kconfig"
 source "drivers/input/touchscreen/xiaomi/Kconfig"
 source "drivers/input/touchscreen/gt9896/Kconfig"
-
-config TOUCHSCREEN_NVT_F7B
-	tristate "novatek touchscreens"
-	help
-	  Say Y here if you have a nvt touchscreen.
-	  nvt controllers are multi touch controllers which can
-	  report 5 touches at a time.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called nvt.
 
 config TOUCHSCREEN_TDDI_DBCLK
 	bool "TDDI IC enable double click"
@@ -664,16 +641,6 @@ config TOUCHSCREEN_EDT_FT5X06
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called edt-ft5x06.
-	  
-config TOUCHSCREEN_ST_FTS
-	tristate "ST FTS I2C Touchscreen"
-	depends on I2C
-	help
-	  Say Y here if you have ST FTS series I2C touchscreen.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here: the
 
 config TOUCHSCREEN_MIGOR
 	tristate "Renesas MIGO-R touchscreen"
@@ -1293,16 +1260,6 @@ config TOUCHSCREEN_ROHM_BU21023
 	  To compile this driver as a module, choose M here: the
 	  module will be called bu21023_ts.
 
-config TOUCHSCREEN_ST
-	bool "STMicroelectronics Touchscreen Driver"
-	depends on I2C
-	help
-	  Say Y here if you have a STMicroelectronics Touchscreen.
-
-	  If unsure, say N.
-
-source "drivers/input/touchscreen/st/Kconfig"
-
 config TOUCHSCREEN_HIMAX_CHIPSET
 	bool "Himax touchpanel CHIPSET"
 	depends on I2C
@@ -1342,7 +1299,5 @@ config TOUCHSCREEN_RAYDIUM_CHIPSET
 	  Say Y here if you have a Raydium WT030 CHIPSET touchscreen.
 
 	  If unsure, say N.
-
-source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 endif

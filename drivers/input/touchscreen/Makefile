@@ -110,21 +110,8 @@ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm/
 obj-$(CONFIG_TOUCHSCREEN_RAYDIUM_CHIPSET)  += raydium_wt030/
 obj-$(CONFIG_TOUCHSCREEN_RASPBERRYPI_FW)	+= raspberrypi-ts.o
 obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
-obj-$(CONFIG_TOUCHSCREEN_ST)	+= st/
-obj-$(CONFIG_TOUCHSCREEN_ST_FTS) += fts/
-obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/
 obj-$(CONFIG_TOUCHSCREEN_TDDI_DBCLK) += double_click.o
-obj-$(CONFIG_TOUCHSCREEN_GOODIX_GTX8) += goodix_driver_gt9886/
-obj-$(CONFIG_TOUCHSCREEN_GOODIX_GTX9886_F4) += f4_goodix_driver_gt9886/
-obj-$(CONFIG_TOUCHSCREEN_ST_FTS_V521) += fts_521/
-obj-$(CONFIG_TOUCHSCREEN_NT36xxx_HOSTDL_SPI) += nt36672c/
+
+# driver xioami
 obj-$(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE) += xiaomi/
-obj-$(CONFIG_TOUCHSCREEN_GOODIX_BRL) += gt9897t/
 obj-$(CONFIG_TOUCHSCREEN_GOODIX_GTX9896_I2C) += gt9896/
-obj-$(CONFIG_TOUCHSCREEN_FTS)		+= ft8719_touch_f7b/
-obj-$(CONFIG_TOUCHSCREEN_NVT_F7B)	+= nvt_touch_f7b/
-obj-$(CONFIG_TOUCHSCREEN_NVT_F7B)	+= lct_ctp_selftest.o
-obj-$(CONFIG_TOUCHSCREEN_NVT_F7B)	+= lct_tp_info.o
-obj-$(CONFIG_TOUCHSCREEN_NVT_F7B)	+= lct_tp_work.o
-obj-$(CONFIG_TOUCHSCREEN_NVT_F7B)	+= lct_tp_gesture.o
-obj-$(CONFIG_TOUCHSCREEN_NVT_F7B)	+= lct_tp_grip_area.o
