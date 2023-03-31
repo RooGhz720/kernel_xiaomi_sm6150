@@ -1900,7 +1900,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
         drm_panel_notifier_unregister(active_panel, &ts_data->fb_notif);
 #else
 */
-    if (fb_drm_unregister_client(&ts_data->fb_notif))
+    if (msm_drm_unregister_client(&ts_data->fb_notif))
         FTS_ERROR("[DRM]Error occurred while unregistering fb_notifier.\n");
 #endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
