@@ -1791,9 +1791,6 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     FTS_FUNC_EXIT();
     return 0;
 
-err_class_create:
-	class_destroy(ts_data->fts_tp_class);
-	ts_data->fts_tp_class = NULL;
 err_irq_req:
 #if FTS_POWER_SOURCE_CUST_EN
 err_power_init:
