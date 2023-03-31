@@ -1417,14 +1417,14 @@ static int fb_notifier_callback(struct notifier_block *self,
     blank = evdata->data;
     FTS_ERROR("FB event:%lu,blank:%d", event, *blank);
     switch (*blank) {
-    case FB_BLANK_UNBLANK:
+    case MSM_FB_BLANK_UNBLANK:
         if (FB_EARLY_EVENT_BLANK == event) {
             FTS_ERROR("resume: event = %lu, not care\n", event);
         } else if (FB_EVENT_BLANK == event) {
             queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
         }
         break;
-    case FB_BLANK_POWERDOWN:
+    case MSM_DRM_BLANK_POWERDOWN:
         if (FB_EARLY_EVENT_BLANK == event) {
             cancel_work_sync(&fts_data->resume_work);
             fts_ts_suspend(ts_data->dev);
@@ -1533,7 +1533,7 @@ static int drm_notifier_callback(struct notifier_block *self,
     }
 
     if (!((event == DRM_EARLY_EVENT_BLANK )
-          || (event == DRM_EVENT_BLANK))) {
+          || (event == MSM_DRM_EVENT_BLANK))) {
         FTS_INFO("event(%lu) do not need process\n", event);
         return 0;
     }
@@ -1541,10 +1541,10 @@ static int drm_notifier_callback(struct notifier_block *self,
     blank = evdata->data;
     FTS_INFO("DRM event:%lu,blank:%d", event, *blank);
     switch (*blank) {
-    case DRM_BLANK_UNBLANK:
+    case MSM_DRM_BLANK_UNBLANK:
         if (DRM_EARLY_EVENT_BLANK == event) {
             FTS_INFO("resume: event = %lu, not care\n", event);
-        } else if (DRM_EVENT_BLANK == event) {
+        } else if (MSM_DRM_EVENT_BLANK == event) {
             queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
         }
         break;
@@ -1552,7 +1552,7 @@ static int drm_notifier_callback(struct notifier_block *self,
         if (DRM_EARLY_EVENT_BLANK == event) {
             cancel_work_sync(&fts_data->resume_work);
             fts_ts_suspend(ts_data->dev);
-        } else if (DRM_EVENT_BLANK == event) {
+        } else if (MSM_DRM_EVENT_BLANK == event) {
             FTS_INFO("suspend: event = %lu, not care\n", event);
         }
         break;
@@ -2073,7 +2073,7 @@ exit:
 /* 2020.12.7 longcheer chenshiyang add (xiaomi game mode ) start */
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
 
-static void fts_init_touchmode_data(void)
+/* static void fts_init_touchmode_data(void)
 {
 	int i;
 
@@ -2131,7 +2131,7 @@ static void fts_init_touchmode_data(void)
 	}
 
 	return;
-}
+} */
 
 static int fts_set_cur_value(int fts_mode, int fts_value)
 {
