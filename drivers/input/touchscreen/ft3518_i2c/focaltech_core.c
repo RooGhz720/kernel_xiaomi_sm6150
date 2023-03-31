@@ -74,7 +74,6 @@
 #if LCT_TP_USB_PLUGIN
 static void fts_ts_usb_plugin_work_func(struct work_struct *work);
 DECLARE_WORK(fts_usb_plugin_work, fts_ts_usb_plugin_work_func);
-extern touchscreen_usb_plugin_data_t g_touchscreen_usb_pulgin;
 #endif
 
 extern char *saved_command_line;
@@ -117,7 +116,6 @@ static void fts_ts_usb_plugin_work_func(struct work_struct *work)
 		FTS_ERROR("tp is suspend,can not be set\n");
 		return;
 	}
-	lct_fts_set_charger_mode(g_touchscreen_usb_pulgin.usb_plugged_in);
 	return;
 
 }
@@ -1784,10 +1782,6 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     register_early_suspend(&ts_data->early_suspend);
 #endif
 
-#if LCT_TP_USB_PLUGIN
-	g_touchscreen_usb_pulgin.event_callback = fts_ts_usb_event_callback;
-#endif
-
     FTS_FUNC_EXIT();
     return 0;
 
@@ -1994,11 +1988,6 @@ static int fts_ts_resume(struct device *dev)
 		FTS_INFO("reopen palm pocket mode");
 		lct_fts_tp_palm_callback(false);
 	}
-#endif
-
-#if LCT_TP_USB_PLUGIN
-	if (g_touchscreen_usb_pulgin.valid)
-		g_touchscreen_usb_pulgin.event_callback();
 #endif
 
     FTS_FUNC_EXIT();
