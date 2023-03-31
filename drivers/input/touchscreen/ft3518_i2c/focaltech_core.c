@@ -1781,7 +1781,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     }
 #else
 */
-    ret = drm_register_client(&ts_data->fb_notif);
+    ret = fb_register_client(&ts_data->fb_notif);
     if (ret) {
         FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
     }
@@ -1900,7 +1900,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
         drm_panel_notifier_unregister(active_panel, &ts_data->fb_notif);
 #else
 */
-    if (drm_unregister_client(&ts_data->fb_notif))
+    if (fb_drm_unregister_client(&ts_data->fb_notif))
         FTS_ERROR("[DRM]Error occurred while unregistering fb_notifier.\n");
 #endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
