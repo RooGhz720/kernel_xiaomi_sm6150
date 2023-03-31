@@ -162,15 +162,6 @@ int fts_wait_tp_to_valid(void)
     return -EIO;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-static struct xiaomi_touch_interface xiaomi_touch_interfaces;
-static int fts_get_mode_value(int mode, int value_type);
-static int fts_get_mode_all(int mode, int *value);
-static int fts_reset_mode(int mode);
-static int fts_set_cur_value(int fts_mode, int fts_value);
-static void fts_init_touchmode_data(void);
-#endif
-
 /*****************************************************************************
 *  Name: fts_tp_state_recovery
 *  Brief: Need execute this function when reset
@@ -1796,31 +1787,6 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 #if LCT_TP_USB_PLUGIN
 	g_touchscreen_usb_pulgin.event_callback = fts_ts_usb_event_callback;
 #endif
-
-/* 2020.12.7 longcheer chenshiyang add (xiaomi game mode) start */
-	if (ts_data->fts_tp_class == NULL) {
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-		ts_data->fts_tp_class = get_xiaomi_touch_class();
-#endif
-		if (ts_data->fts_tp_class) {
-			ts_data->fts_touch_dev = device_create(ts_data->fts_tp_class, NULL, 0x38, ts_data, "tp_dev");
-			if (IS_ERR(ts_data->fts_touch_dev)) {
-				FTS_ERROR("Failed to create device !");
-				goto err_class_create;
-			}
-			dev_set_drvdata(ts_data->fts_touch_dev, ts_data);
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-			memset(&xiaomi_touch_interfaces, 0x00, sizeof(struct xiaomi_touch_interface));
-			xiaomi_touch_interfaces.getModeValue = fts_get_mode_value;
-			xiaomi_touch_interfaces.setModeValue = fts_set_cur_value;
-			xiaomi_touch_interfaces.resetMode = fts_reset_mode;
-			xiaomi_touch_interfaces.getModeAll = fts_get_mode_all;
-			fts_init_touchmode_data();
-			xiaomitouch_register_modedata(&xiaomi_touch_interfaces);
-#endif
-		}
-	}
-/* 2020.12.7 longcheer chenshiyang add (xiaomi game mode ) end */
 
     FTS_FUNC_EXIT();
     return 0;
