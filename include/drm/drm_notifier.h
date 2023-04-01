@@ -31,8 +31,8 @@ struct drm_notify_data {
 	void *data;
 };
 
-extern int drm_register_client(struct notifier_block *nb);
-extern int drm_unregister_client(struct notifier_block *nb);
-extern int drm_notifier_call_chain(unsigned long val, void *v);
+extern int msm_drm_register_client(struct notifier_block *nb);
+extern int msm_drm_unregister_client(struct notifier_block *nb);
+extern int msm_drm_notifier_call_chain(unsigned long val, void *v);
 
 #endif /*_DRM_NOTIFIER_H*/
