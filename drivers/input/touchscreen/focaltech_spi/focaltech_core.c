@@ -41,7 +41,7 @@
 #include <linux/times.h>
 #include <linux/time.h>
 #if defined(CONFIG_DRM)
-#include <drm/drm_notifier.h>
+#include <linux/msm_drm_notify.h>
 #elif defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
