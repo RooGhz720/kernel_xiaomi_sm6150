@@ -12,20 +12,13 @@ menuconfig INPUT_TOUCHSCREEN
 if INPUT_TOUCHSCREEN
 source "drivers/input/touchscreen/xiaomi/Kconfig"
 source "drivers/input/touchscreen/gt9896/Kconfig"
-source "drivers/input/touchscreen/ft3658u_i2c/Kconfig"
+source "drivers/input/touchscreen/focaltech_spi/Kconfig"
 
 config TOUCHSCREEN_TDDI_DBCLK
 	bool "TDDI IC enable double click"
 	help
 	  Say Y here if you have a tddi ic and want keep avdd,avee
 	  when suspend.
-
-config TOUCHSCREEN_COMMON
-		bool "touchscreen for LCT project"
-		depends on SPI
-		default y
-		help
-			Say Y here if you have lct tp info connected.
 	
 config TOUCHSCREEN_PROPERTIES
 	def_tristate INPUT
@@ -1307,7 +1300,5 @@ config TOUCHSCREEN_RAYDIUM_CHIPSET
 	  Say Y here if you have a Raydium WT030 CHIPSET touchscreen.
 
 	  If unsure, say N.
-
-source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 endif

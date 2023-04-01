@@ -148,12 +148,12 @@ struct xiaomi_touch *xiaomi_touch_dev_get(int minor)
 		return NULL;
 }
 
-struct class *get_xiaomi_touch_class(void)
+struct class *get_xiaomi_touch_class()
 {
 	return xiaomi_touch_dev.class;
 }
 
-struct device *get_xiaomi_touch_dev(void)
+struct device *get_xiaomi_touch_dev()
 {
 	return xiaomi_touch_dev.dev;
 }

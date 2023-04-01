@@ -115,13 +115,5 @@ obj-$(CONFIG_TOUCHSCREEN_TDDI_DBCLK) += double_click.o
 # driver xioami
 obj-$(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE) += xiaomi/
 obj-$(CONFIG_TOUCHSCREEN_GOODIX_GTX9896_I2C) += gt9896/
-obj-$(CONFIG_TOUCHSCREEN_FT3518_I2C)         += ft3658u_i2c/
-obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/
+obj-$(CONFIG_TOUCHSCREEN_FTS) += focaltech_spi/
 
-# xiaomi fts addon
-obj-$(CONFIG_TOUCHSCREEN_COMMON)             += lct_tp_info.o
-obj-$(CONFIG_TOUCHSCREEN_COMMON)             += lct_tp_selftest.o
-obj-$(CONFIG_TOUCHSCREEN_COMMON)             += lct_tp_gesture.o
-obj-$(CONFIG_TOUCHSCREEN_COMMON)             += lct_tp_palm.o
-obj-$(CONFIG_TOUCHSCREEN_COMMON)             += lct_tp_grip_area.o
-obj-$(CONFIG_TOUCHSCREEN_COMMON)             += lct_tp_work.o
