@@ -2199,7 +2199,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 
 #if defined(CONFIG_DRM)
 	ts_data->fb_notif.notifier_call = drm_notifier_callback;
-	ret = drm_register_client(&ts_data->fb_notif);
+	ret = msm_drm_register_client(&ts_data->fb_notif);
 	if (ret) {
 		FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
 	}
@@ -2289,7 +2289,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 	if (ts_data->ts_workqueue)
 		destroy_workqueue(ts_data->ts_workqueue);
 #if defined(CONFIG_DRM)
-	if (drm_unregister_client(&ts_data->fb_notif))
+	if (msm_drm_unregister_client(&ts_data->fb_notif))
 		FTS_ERROR("[DRM]Error occurred while unregistering drm_notifier.");
 #elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts_data->fb_notif))
