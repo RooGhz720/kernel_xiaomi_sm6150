@@ -162,7 +162,7 @@
 /*
  * choose your ic chip type of focaltech
  */
-#define FTS_CHIP_TYPE   _FT3518
+#define FTS_CHIP_TYPE   _FT3658U
 
 /******************* Enables *********************/
 /*********** 1 to enable, 0 to disable ***********/
@@ -171,7 +171,7 @@
  * show debug log info
  * enable it for debug, disable it for release
  */
-#define FTS_DEBUG_EN                            0
+#define FTS_DEBUG_EN                            1
 
 /*
  * Linux MultiTouch Protocol
@@ -219,17 +219,17 @@
 /*
  * enable/disable palm feature
  */
-#define LCT_TP_PALM_EN                          1
+#define LCT_TP_PALM_EN                          0
 
 /*
  * enable/disable 'grip area' feature
  */
-#define LCT_TP_GRIP_AREA_EN                     1
+#define LCT_TP_GRIP_AREA_EN                     0
 
 /*
  * enable tp usb plugin feature
  */
-#define LCT_TP_USB_PLUGIN                       1
+#define LCT_TP_USB_PLUGIN                       0
 
 /****************************************************/
 
@@ -268,8 +268,8 @@
  * You should rename fw to "focaltech_ts_fw_tianma", and push it into
  * etc/firmware or by customers
  */
-#define FTS_MODULE_NAME                        ""
-#define FTS_MODULE2_NAME                       ""
+#define FTS_MODULE_NAME                        "tianma"
+#define FTS_MODULE2_NAME                       "samsung"
 #define FTS_MODULE3_NAME                       ""
 
 /*
