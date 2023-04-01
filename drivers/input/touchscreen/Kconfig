@@ -1300,5 +1300,7 @@ config TOUCHSCREEN_RAYDIUM_CHIPSET
 	  Say Y here if you have a Raydium WT030 CHIPSET touchscreen.
 
 	  If unsure, say N.
+	  
+source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 endif

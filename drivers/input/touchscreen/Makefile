@@ -111,6 +111,7 @@ obj-$(CONFIG_TOUCHSCREEN_RAYDIUM_CHIPSET)  += raydium_wt030/
 obj-$(CONFIG_TOUCHSCREEN_RASPBERRYPI_FW)	+= raspberrypi-ts.o
 obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
 obj-$(CONFIG_TOUCHSCREEN_TDDI_DBCLK) += double_click.o
+obj-$(CONFIG_TOUCHSCREEN_FTS_CAF)	+= focaltech_touch/
 
 # driver xioami
 obj-$(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE) += xiaomi/
