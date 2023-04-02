@@ -2537,10 +2537,10 @@ static struct spi_driver fts_ts_driver = {
  */
 static int get_dsi_display0(u8 *display0)
 {
-	char *ptr_display0 = (char *)strnstr(saved_command_line, "msm_drm.dsi_display0=mdss_dsi_k9a_", strlen(saved_command_line));
+	char *ptr_display0 = (char *)strnstr(saved_command_line, "msm_drm.dsi_display0=mdss_dsi_k6_", strlen(saved_command_line));
 
 	if (ptr_display0) {
-		memcpy(display0, (ptr_display0 + strlen("msm_drm.dsi_display0=mdss_dsi_k9a_")), 2);
+		memcpy(display0, (ptr_display0 + strlen("msm_drm.dsi_display0=mdss_dsi_k6_")), 2);
 		FTS_INFO("display0 is %s", display0);
 		return 0;
 	} else
@@ -2599,7 +2599,7 @@ static void __exit fts_ts_exit(void)
 	spi_unregister_driver(&fts_ts_driver);
 }
 
-late_initcall(fts_ts_init);
+device_initcall_sync(fts_ts_init);
 module_exit(fts_ts_exit);
 
 MODULE_AUTHOR("FocalTech Driver Team");
