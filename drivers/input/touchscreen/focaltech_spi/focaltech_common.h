@@ -80,8 +80,8 @@
 #define FTS_REG_CHIP_ID2                    0x9F
 #define FTS_REG_POWER_MODE                  0xA5
 #define FTS_REG_POWER_MODE_SLEEP            0x03
-#define FTS_REG_FW_VER                      0xA6
-#define FTS_REG_VENDOR_ID                   0xA8
+#define FTS_REG_FW_VER                      0x14
+#define FTS_REG_VENDOR_ID                   0x8D
 #define FTS_REG_LCD_BUSY_NUM                0xAB
 #define FTS_REG_FACE_DEC_MODE_EN            0xB0
 #define FTS_REG_FACTORY_MODE_DETACH_FLAG    0xB4
