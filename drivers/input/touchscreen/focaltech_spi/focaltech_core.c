@@ -1458,7 +1458,7 @@ static int drm_notifier_callback(struct notifier_block *self,
 {
 	struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
 					fb_notif);
-	struct drm_notify_data* fbdata = data;
+	struct msm_drm_notifier *fbdata = data;
 	int blank;
 
 	if (check_fps(event, fbdata->data))
