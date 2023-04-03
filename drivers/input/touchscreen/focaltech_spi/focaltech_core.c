@@ -2465,7 +2465,7 @@ static int fts_ts_probe(struct spi_device *spi)
 	int ret = 0;
 	struct fts_ts_data *ts_data = NULL;
 
-	FTS_INFO("Touch Screen(SPI BUS) driver prboe...");
+	FTS_INFO("Touch Screen(SPI BUS) driver probe...");
 	spi->mode = SPI_MODE_0;
 	spi->max_speed_hz = 12000000;
 	spi->bits_per_word = 8;
@@ -2512,7 +2512,7 @@ static const struct spi_device_id fts_ts_id[] = {
 	{},
 };
 static const struct of_device_id fts_dt_match[] = {
-	{.compatible = "focaltech,fts", },
+	{.compatible = "focaltech,fts_K6", },
 	{.compatible = "xiaomi,spits", },
 	{},
 };
