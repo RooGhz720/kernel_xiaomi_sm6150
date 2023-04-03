@@ -2460,61 +2460,55 @@ static const struct dev_pm_ops fts_dev_pm_ops = {
 /*****************************************************************************
 * TP Driver
 *****************************************************************************/
-static int fts_ts_probe(struct spi_device *spi)
+static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	int ret = 0;
-	struct fts_ts_data *ts_data = NULL;
+    int ret = 0;
+    struct fts_ts_data *ts_data = NULL;
 
-	FTS_INFO("Touch Screen(SPI BUS) driver probe...");
-	spi->mode = SPI_MODE_0;
-	spi->max_speed_hz = 12000000;
-	spi->bits_per_word = 8;
-	ret = spi_setup(spi);
-	if (ret) {
-		FTS_ERROR("spi setup fail");
-		return ret;
-	}
+    FTS_INFO("Touch Screen(I2C BUS) driver prboe...");
+    if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+        FTS_ERROR("I2C not supported");
+        return -ENODEV;
+    }
 
-	/* malloc memory for global struct variable */
-	ts_data = (struct fts_ts_data *)kzalloc(sizeof(*ts_data), GFP_KERNEL);
-	if (!ts_data) {
-		FTS_ERROR("allocate memory for fts_data fail");
-		return -ENOMEM;
-	}
+    /* malloc memory for global struct variable */
+    ts_data = (struct fts_ts_data *)kzalloc(sizeof(*ts_data), GFP_KERNEL);
+    if (!ts_data) {
+        FTS_ERROR("allocate memory for fts_data fail");
+        return -ENOMEM;
+    }
 
-	fts_data = ts_data;
-	ts_data->spi = spi;
-	ts_data->dev = &spi->dev;
-	ts_data->log_level = 1;
-	ts_data->poweroff_on_sleep = false;
+    fts_data = ts_data;
+    ts_data->client = client;
+    ts_data->dev = &client->dev;
+    ts_data->log_level = 1;
+    ts_data->fw_is_running = 0;
+    ts_data->bus_type = BUS_TYPE_I2C;
+    i2c_set_clientdata(client, ts_data);
 
-	ts_data->bus_type = BUS_TYPE_SPI_V2;
-	spi_set_drvdata(spi, ts_data);
+    ret = fts_ts_probe_entry(ts_data);
+    if (ret) {
+        FTS_ERROR("Touch Screen(I2C BUS) driver probe fail");
+        kfree_safe(ts_data);
+        return ret;
+    }
 
-	ret = fts_ts_probe_entry(ts_data);
-	if (ret) {
-		FTS_ERROR("Touch Screen(SPI BUS) driver probe fail");
-		kfree_safe(ts_data);
-		return ret;
-	}
-
-	FTS_INFO("Touch Screen(SPI BUS) driver prboe successfully");
-	return 0;
+    FTS_INFO("Touch Screen(I2C BUS) driver probe successfully");
+    return 0;
 }
 
-static int fts_ts_remove(struct spi_device *spi)
+static int fts_ts_remove(struct i2c_client *spi)
 {
 	return fts_ts_remove_entry(spi_get_drvdata(spi));
 }
 
-static const struct spi_device_id fts_ts_id[] = {
-	{FTS_DRIVER_NAME, 0},
-	{},
+static const struct i2c_device_id fts_ts_id[] = {
+    {FTS_DRIVER_NAME, 0},
+    {},
 };
 static const struct of_device_id fts_dt_match[] = {
-	{.compatible = "focaltech,fts_K6", },
-	{.compatible = "xiaomi,spits", },
-	{},
+    {.compatible = "focaltech,fts", },
+    {},
 };
 MODULE_DEVICE_TABLE(of, fts_dt_match);
 
