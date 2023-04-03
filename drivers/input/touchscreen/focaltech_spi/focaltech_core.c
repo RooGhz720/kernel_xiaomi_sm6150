@@ -2535,68 +2535,31 @@ static struct spi_driver fts_ts_driver = {
 /*
  *
  */
-static int get_dsi_display0(u8 *display0)
-{
-	char *ptr_display0 = (char *)strnstr(saved_command_line, "msm_drm.dsi_display0=mdss_dsi_k6_", strlen(saved_command_line));
-
-	if (ptr_display0) {
-		memcpy(display0, (ptr_display0 + strlen("msm_drm.dsi_display0=mdss_dsi_k6_")), 2);
-		FTS_INFO("display0 is %s", display0);
-		return 0;
-	} else
-		return -EINVAL;
-}
-
-static int check_touch_ic(void)
-{
-	char display0[5] = {'\0'};
-	int ret = -1;
-	ret =  get_dsi_display0(display0);
-	if (ret) {
-		FTS_ERROR("get dsi_display0 failed!");
-		return -EINVAL;
-	}
-
-	if (!strncmp(display0, "36", strlen("36"))) {
-		FTS_INFO("goodix ic");
-		return 36;
-	} else if (!strncmp(display0, "42", strlen("42"))) {
-		FTS_INFO("focal ic");
-		return 42;
-	} else {
-		FTS_INFO("unknow ic");
-		return 0;
-	}
-}
-
 
 static int __init fts_ts_init(void)
 {
-	int ret = 0;
-	int touch_ic = -1;
+    int ret = 0;
 
-	FTS_FUNC_ENTER();
-	touch_ic = check_touch_ic();
-	if (touch_ic != 42 && touch_ic != 0)
-		return 0;
+    FTS_FUNC_ENTER();
 
-	ret = spi_register_driver(&fts_ts_driver);
-	if (ret != 0)
-		FTS_ERROR("Focaltech touch screen driver init failed!");
-
+    //Check android mode
+    if (strnstr(saved_command_line, "androidboot.mode=charger", 2048) != NULL) {
+	FTS_ERROR("androidboot.mode=charger, doesn't support touch in the charging mode!");
 	FTS_FUNC_EXIT();
-	return ret;
+	return -ENODEV;
+	}
+
+    ret = i2c_add_driver(&fts_ts_driver);
+    if ( ret != 0 ) {
+        FTS_ERROR("Focaltech touch screen driver init failed!");
+    }
+    FTS_FUNC_EXIT();
+    return ret;
 }
 
 static void __exit fts_ts_exit(void)
 {
-	int touch_ic = -1;
-
-	touch_ic = check_touch_ic();
-	if (touch_ic != 42 && touch_ic != 0)
-		return;
-	FTS_INFO("fts ts exit");
-	spi_unregister_driver(&fts_ts_driver);
+    i2c_del_driver(&fts_ts_driver);
 }
 
 device_initcall_sync(fts_ts_init);
