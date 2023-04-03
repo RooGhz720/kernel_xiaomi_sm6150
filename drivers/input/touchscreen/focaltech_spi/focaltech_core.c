@@ -2518,7 +2518,7 @@ static const struct of_device_id fts_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, fts_dt_match);
 
-static struct spi_driver fts_ts_driver = {
+static struct i2c_driver fts_ts_driver = {
 	.probe = fts_ts_probe,
 	.remove = fts_ts_remove,
 	.driver = {
