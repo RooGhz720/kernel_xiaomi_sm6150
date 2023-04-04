@@ -500,11 +500,7 @@ CONFIG_ARCH_SDMMAGPIE=y
 #
 # Xiaomi device selection
 #
-# CONFIG_MACH_XIAOMI_DAVINCI is not set
-# CONFIG_MACH_XIAOMI_PHOENIX is not set
 CONFIG_MACH_XIAOMI_SWEET=y
-# CONFIG_MACH_XIAOMI_TOCO is not set
-# CONFIG_MACH_XIAOMI_TUCANA is not set
 
 #
 # Bus support
