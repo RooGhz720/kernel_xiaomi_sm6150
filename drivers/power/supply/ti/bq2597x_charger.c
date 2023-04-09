@@ -2471,7 +2471,7 @@ static const struct i2c_device_id bq2597x_charger_id[] = {
 
 static struct i2c_driver bq2597x_charger_driver = {
 	.driver		= {
-		.name	= "bq2597x~CURSED",
+		.name	= "bq2597x",
 		.owner	= THIS_MODULE,
 		.of_match_table = bq2597x_charger_match_table,
 		.pm	= &bq2597x_pm_ops,

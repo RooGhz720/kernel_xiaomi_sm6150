@@ -1682,7 +1682,7 @@ static const struct dev_pm_ops ln8000_pm_ops = {
 
 static struct i2c_driver ln8000_driver = {
     .driver   = {
-        .name = "ln8000-charger",
+        .name = "ln8000",
         .owner = THIS_MODULE,
         .of_match_table = of_match_ptr(ln8000_dt_match),
 #if defined(CONFIG_PM)
