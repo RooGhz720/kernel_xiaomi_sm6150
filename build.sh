@@ -11,6 +11,8 @@ export ARCH=arm64
 export SUBARCH=arm64
 export KBUILD_COMPILER_STRING="$($HOME/cosmic/bin/clang --version | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')"
 
+git clone --depth=1 -b master https://github.com/RooGhz720/Anykernel3.git AnyKernel3
+
 if ! [ -d "$HOME/cosmic" ]; then
 echo "Cosmic clang not found! Cloning..."
 if ! git clone -q https://gitlab.com/PixelOS-Devices/playgroundtc.git --depth=1 -b 17 ~/cosmic; then ## ini Clang nya tools untuk membangun/compile kernel nya (tidak semua kernel mendukung clang)
