@@ -310,24 +310,17 @@ void simple_lmk_mm_freed(struct mm_struct *mm)
 	read_unlock(&mm_free_lock);
 }
 
-static bool is_oom_conditions(unsigned long old_pressure, unsigned long new_pressure, unsigned long min_pressure)
+void simple_lmk_trigger(void)
 {
-	return old_pressure == min_pressure && new_pressure == old_pressure && new_pressure >= min_pressure;
+	if (!atomic_cmpxchg_acquire(&needs_reclaim, 0, 1))
+		wake_up(&oom_waitq);
 }
 
 static int simple_lmk_vmpressure_cb(struct notifier_block *nb,
 				    unsigned long pressure, void *data)
 {
-	unsigned long min_pressure_margin = atomic_read_acquire(&min_pressure);
-	static unsigned long new_pressure = 0;
-	static unsigned long old_pressure;
-
-	old_pressure = new_pressure;
-	new_pressure = pressure;
-
-	if (is_oom_conditions(old_pressure, new_pressure, min_pressure_margin) &&
-			!atomic_cmpxchg_acquire(&needs_reclaim, 0, 1))
-		wake_up(&oom_waitq);
+	if (pressure >= 90)
+		simple_lmk_trigger();
 
 	return NOTIFY_OK;
 }
