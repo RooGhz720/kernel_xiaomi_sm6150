@@ -310,11 +310,6 @@ void simple_lmk_mm_freed(struct mm_struct *mm)
 	read_unlock(&mm_free_lock);
 }
 
-static bool is_oom_conditions(unsigned long old_pressure, unsigned long new_pressure, unsigned long min_pressure)
-{
-	return old_pressure == min_pressure && new_pressure == old_pressure && new_pressure >= min_pressure;
-}
-
 void simple_lmk_trigger(void)
 {
 	if (!atomic_cmpxchg_acquire(&needs_reclaim, 0, 1))
