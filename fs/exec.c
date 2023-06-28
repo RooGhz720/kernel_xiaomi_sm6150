@@ -62,6 +62,7 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
+#include <misc/aghisna_ksu.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1726,10 +1727,13 @@ static int do_execveat_common(int fd, struct filename *filename,
 	struct files_struct *displaced;
 	int retval;
 
-        if (unlikely(ksu_execveat_hook))
-		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-	else
-		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);  // call KSU hook first
+	if (ksu_sue) {
+		if (unlikely(ksu_execveat_hook))
+			ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+		else
+			ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);  // call KSU hook first
+	}
+			
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
 

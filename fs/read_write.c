@@ -20,6 +20,7 @@
 #include <linux/compat.h>
 #include <linux/mount.h>
 #include <linux/fs.h>
+#include <misc/aghisna_ksu.h>
 #include "internal.h"
 
 #include <linux/uaccess.h>
@@ -438,8 +439,11 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
 
-        if (unlikely(ksu_vfs_read_hook))
-		ksu_handle_vfs_read(&file, &buf, &count, &pos); // call KSU fork first
+	if (ksu_sue) {
+		if (unlikely(ksu_vfs_read_hook))
+			ksu_handle_vfs_read(&file, &buf, &count, &pos); // call KSU fork first
+	}
+		
 	if (!(file->f_mode & FMODE_READ))
 		return -EBADF;
 	if (!(file->f_mode & FMODE_CAN_READ))
