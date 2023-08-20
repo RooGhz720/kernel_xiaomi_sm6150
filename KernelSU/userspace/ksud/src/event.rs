@@ -3,6 +3,7 @@ use log::{info, warn};
 use std::path::PathBuf;
 use std::{collections::HashMap, path::Path};
 
+use crate::module::prune_modules;
 use crate::{
     assets, defs, mount, restorecon,
     utils::{self, ensure_clean_dir, ensure_dir_exists},
@@ -29,8 +30,8 @@ pub fn mount_systemlessly(module_dir: &str) -> Result<()> {
     // construct overlay mount params
     let dir = std::fs::read_dir(module_dir);
     let Ok(dir) = dir else {
-            bail!("open {} failed", defs::MODULE_DIR);
-        };
+        bail!("open {} failed", defs::MODULE_DIR);
+    };
 
     let mut system_lowerdir: Vec<String> = Vec::new();
 
@@ -91,6 +92,8 @@ pub fn mount_systemlessly(module_dir: &str) -> Result<()> {
 pub fn on_post_data_fs() -> Result<()> {
     crate::ksu::report_post_fs_data();
 
+    utils::umask(0);
+
     #[cfg(unix)]
     let _ = catch_bootlog();
 
@@ -99,7 +102,18 @@ pub fn on_post_data_fs() -> Result<()> {
         return Ok(());
     }
 
-    utils::umask(0);
+    let safe_mode = crate::utils::is_safe_mode();
+
+    if safe_mode {
+        // we should still mount modules.img to `/data/adb/modules` in safe mode
+        // becuase we may need to operate the module dir in safe mode
+        warn!("safe mode, skip common post-fs-data.d scripts");
+    } else {
+        // Then exec common post-fs-data scripts
+        if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", true) {
+            warn!("exec common post-fs-data scripts failed: {}", e);
+        }
+    }
 
     let module_update_img = defs::MODULE_UPDATE_IMG;
     let module_img = defs::MODULE_IMG;
@@ -128,7 +142,6 @@ pub fn on_post_data_fs() -> Result<()> {
         }
     }
 
-    // If there isn't any image exist, do nothing for module!
     if !Path::new(target_update_img).exists() {
         return Ok(());
     }
@@ -139,8 +152,8 @@ pub fn on_post_data_fs() -> Result<()> {
     mount::AutoMountExt4::try_new(target_update_img, module_dir, false)
         .with_context(|| "mount module image failed".to_string())?;
 
-    // check safe mode first.
-    if crate::utils::is_safe_mode() {
+    // if we are in safe mode, we should disable all modules
+    if safe_mode {
         warn!("safe mode, skip post-fs-data scripts and disable all modules!");
         if let Err(e) = crate::module::disable_all_modules() {
             warn!("disable all modules failed: {}", e);
@@ -148,9 +161,12 @@ pub fn on_post_data_fs() -> Result<()> {
         return Ok(());
     }
 
-    // Then exec common post-fs-data scripts
-    if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", true) {
-        warn!("exec common post-fs-data scripts failed: {}", e);
+    if let Err(e) = prune_modules() {
+        warn!("prune modules failed: {}", e);
+    }
+
+    if let Err(e) = restorecon::restorecon() {
+        warn!("restorecon failed: {}", e);
     }
 
     // load sepolicy.rule
@@ -164,7 +180,7 @@ pub fn on_post_data_fs() -> Result<()> {
 
     // exec modules post-fs-data scripts
     // TODO: Add timeout
-    if let Err(e) = crate::module::exec_post_fs_data() {
+    if let Err(e) = crate::module::exec_stage_script("post-fs-data", true) {
         warn!("exec post-fs-data scripts failed: {}", e);
     }
 
@@ -178,30 +194,37 @@ pub fn on_post_data_fs() -> Result<()> {
         warn!("do systemless mount failed: {}", e);
     }
 
+    run_stage("post-mount", true);
+
     std::env::set_current_dir("/").with_context(|| "failed to chdir to /")?;
 
     Ok(())
 }
 
-pub fn on_services() -> Result<()> {
+fn run_stage(stage: &str, block: bool) {
     utils::umask(0);
 
     if utils::has_magisk() {
-        warn!("Magisk detected, skip services!");
-        return Ok(());
+        warn!("Magisk detected, skip {stage}");
+        return;
     }
 
     if crate::utils::is_safe_mode() {
-        warn!("safe mode, skip module service scripts");
-        return Ok(());
+        warn!("safe mode, skip {stage} scripts");
+        return;
     }
 
-    if let Err(e) = crate::module::exec_common_scripts("service.d", false) {
-        warn!("Failed to exec common service scripts: {}", e);
+    if let Err(e) = crate::module::exec_common_scripts(&format!("{stage}.d"), block) {
+        warn!("Failed to exec common {stage} scripts: {e}");
     }
-    if let Err(e) = crate::module::exec_services() {
-        warn!("Failed to exec service scripts: {}", e);
+    if let Err(e) = crate::module::exec_stage_script(stage, block) {
+        warn!("Failed to exec {stage} scripts: {e}");
     }
+}
+
+pub fn on_services() -> Result<()> {
+    info!("on_services triggered!");
+    run_stage("service", false);
 
     Ok(())
 }
@@ -220,13 +243,16 @@ pub fn on_boot_completed() -> Result<()> {
             std::fs::remove_file(module_update_img).with_context(|| "Failed to remove image!")?;
         }
     }
+
+    run_stage("boot-completed", false);
+
     Ok(())
 }
 
 pub fn install() -> Result<()> {
     ensure_dir_exists(defs::ADB_DIR)?;
     std::fs::copy("/proc/self/exe", defs::DAEMON_PATH)?;
-    restorecon::setcon(defs::DAEMON_PATH, restorecon::ADB_CON)?;
+    restorecon::lsetfilecon(defs::DAEMON_PATH, restorecon::ADB_CON)?;
     // install binary assets
     assets::ensure_binaries().with_context(|| "Failed to extract assets")?;
 

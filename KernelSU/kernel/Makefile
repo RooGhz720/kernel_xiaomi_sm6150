@@ -12,15 +12,18 @@ obj-y += embed_ksud.o
 obj-y += kernel_compat.o
 obj-y += selinux/
 
-ifndef EXPECTED_SIZE
-EXPECTED_SIZE := 0x033b
+ifndef KSU_EXPECTED_SIZE
+KSU_EXPECTED_SIZE := 0x033b
 endif
 
-ifndef EXPECTED_HASH
-EXPECTED_HASH := 0xb0b91415
+ifndef KSU_EXPECTED_HASH
+KSU_EXPECTED_HASH := 0xb0b91415
 endif
 
-ccflags-y += -DEXPECTED_SIZE=$(EXPECTED_SIZE)
-ccflags-y += -DEXPECTED_HASH=$(EXPECTED_HASH)
+$(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
+$(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
+
+ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
+ccflags-y += -DEXPECTED_HASH=$(KSU_EXPECTED_HASH)
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
 ccflags-y += -Wno-declaration-after-statement
