@@ -84,7 +84,7 @@
 				qcom,mdss-dsi-h-right-border = <0>;
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
-				qcom,mdss-dsi-panel-framerate = <91>;
+				qcom,mdss-dsi-panel-framerate = <120>;
 				qcom,mdss-dsi-on-command = [
 					05 01 00 00 14 00 02 11 00
 					39 01 00 00 00 00 03 F0 5A 5A
@@ -177,14 +177,14 @@
 					39 00 00 00 00 00 02 60 01
 					39 00 00 00 00 00 02 F7 0B
 					39 01 00 00 00 00 03 F0 A5 A5];
-				qcom,mdss-dsi-dispparam-bc-91hz-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-dispparam-bc-120hz-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-dispparam-bc-91hz-command = [
 					/* Brightness Control - Freq Setting */
 					39 00 00 00 00 00 03 F0 5A 5A
 					39 00 00 00 00 00 02 60 21
 					39 00 00 00 00 00 02 F7 0B
 					39 01 00 00 00 00 03 F0 A5 A5];
-				qcom,mdss-dsi-dispparam-bc-91hz-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-dispparam-bc-120hz-command-state = "dsi_lp_mode";
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-version = <0x11>;
 				qcom,mdss-dsc-scr-version = <0x0>;
@@ -204,7 +204,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 					39 01 00 00 00 00 03 51 01 E8
 				];
-				qcom,mdss-dsi-dispparam-91hz-dc-crc-setting-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-dispparam-120hz-dc-crc-setting-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-dispparam-91hz-dc-crc-setting-command = [
 					39 01 00 00 00 00 03 F0 5A 5A
 					39 00 00 00 00 00 02 80 05
