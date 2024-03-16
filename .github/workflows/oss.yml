@@ -1,4 +1,4 @@
-name: Aghisna OSS
+name: DARK OSS
 on:
   workflow_dispatch:
 
@@ -21,7 +21,7 @@ jobs:
           libghc-libyaml-dev libyaml-dev glibc-source \
     - name: ready compile...
       run: |
-          curl https://raw.githubusercontent.com/RooGhz720/RooGhz720/main/nonrx/oss.sh > oss.sh
+          curl https://raw.githubusercontent.com/ShubhamRai118/Some_stuff/main/nonrx/oss.sh > oss.sh
           chmod +x oss.sh
           bash oss.sh
       shell: bash
