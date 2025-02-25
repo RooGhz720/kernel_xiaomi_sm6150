@@ -1,13 +1,28 @@
-#include "linux/fs.h"
-#include "linux/module.h"
-#include "linux/workqueue.h"
+#include <linux/export.h>
+#include <linux/fs.h>
+#include <linux/kobject.h>
+#include <linux/module.h>
+#include <linux/workqueue.h>
 
 #include "allowlist.h"
 #include "arch.h"
 #include "core_hook.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
-#include "uid_observer.h"
+#include "throne_tracker.h"
+
+unsigned int enable_kernelsu = 1;
+static int __init read_kernelsu_state(char *s)
+{
+	if (s)
+		enable_kernelsu = simple_strtoul(s, NULL, 0);
+	return 1;
+}
+__setup("aghisna.su=", read_kernelsu_state);
+unsigned int get_ksu_state(void)
+{
+	return enable_kernelsu;
+}
 
 static struct workqueue_struct *ksu_workqueue;
 
@@ -30,16 +45,24 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 					    flags);
 }
 
-extern void ksu_enable_sucompat();
-extern void ksu_enable_ksud();
+extern void ksu_sucompat_init();
+extern void ksu_sucompat_exit();
+extern void ksu_ksud_init();
+extern void ksu_ksud_exit();
 
 int __init kernelsu_init(void)
 {
+
+	if (enable_kernelsu < 1) {
+	pr_info_once("KernelSu Disable");
+		return 0;
+	}
+
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert("*************************************************************");
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
 	pr_alert("**                                                         **");
-	pr_alert("**         You are running DEBUG version of KernelSU       **");
+	pr_alert("**         You are running KernelSU in DEBUG mode          **");
 	pr_alert("**                                                         **");
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
 	pr_alert("*************************************************************");
@@ -47,29 +70,43 @@ int __init kernelsu_init(void)
 
 	ksu_core_init();
 
-	ksu_workqueue = alloc_workqueue("kernelsu_work_queue", 0, 0);
+	ksu_workqueue = alloc_ordered_workqueue("kernelsu_work_queue", 0);
 
 	ksu_allowlist_init();
 
-	ksu_uid_observer_init();
+	ksu_throne_tracker_init();
 
-#ifdef CONFIG_KPROBES
-	// ksu_enable_sucompat();
-	// ksu_enable_ksud();
+#ifdef CONFIG_KSU_WITH_KPROBES
+	ksu_sucompat_init();
+	ksu_ksud_init();
 #else
-	// pr_alert("KPROBES is disabled, KernelSU may not work, please check https://kernelsu.org/guide/how-to-integrate-for-non-gki.html");
+	pr_alert("KPROBES is disabled, KernelSU may not work, please check https://kernelsu.org/guide/how-to-integrate-for-non-gki.html");
 #endif
 
+#ifdef MODULE
+#ifndef CONFIG_KSU_DEBUG
+	kobject_del(&THIS_MODULE->mkobj.kobj);
+#endif
+#endif
 	return 0;
 }
 
 void kernelsu_exit(void)
 {
+
+	if (enable_kernelsu < 1)
+		return;
+
 	ksu_allowlist_exit();
 
-	ksu_uid_observer_exit();
+	ksu_throne_tracker_exit();
 
 	destroy_workqueue(ksu_workqueue);
+
+#ifdef CONFIG_KSU_WITH_KPROBES
+	ksu_ksud_exit();
+	ksu_sucompat_exit();
+#endif
 
 	ksu_core_exit();
 }

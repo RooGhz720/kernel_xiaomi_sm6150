@@ -1,25 +1,14 @@
-#include "sepolicy.h"
-#include "linux/gfp.h"
-#include "linux/printk.h"
-#include "linux/slab.h"
-#include "linux/version.h"
+#include <linux/gfp.h>
+#include <linux/printk.h>
+#include <linux/slab.h>
+#include <linux/version.h>
 
+#include "sepolicy.h"
 #include "../klog.h" // IWYU pragma: keep
 #include "ss/symtab.h"
+#include "../kernel_compat.h" // Add check Huawei Device
 
 #define KSU_SUPPORT_ADD_TYPE
-
-/*
- * Adapt to Huawei HISI kernel without affecting other kernels ,
- * Huawei Hisi Kernel EBITMAP Enable or Disable Flag ,
- * From ss/ebitmap.h
- */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0) &&                           \
-	LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
-#ifdef HISI_SELINUX_EBITMAP_RO
-#define CONFIG_IS_HW_HISI
-#endif
-#endif
 
 //////////////////////////////////////////////////////
 // Declaration
@@ -73,7 +62,7 @@ static bool add_typeattribute(struct policydb *db, const char *type,
 // rules
 #define strip_av(effect, invert) ((effect == AVTAB_AUDITDENY) == !invert)
 
-#define ksu_hash_for_each(node_ptr, n_slot, cur)                                   \
+#define ksu_hash_for_each(node_ptr, n_slot, cur)                               \
 	int i;                                                                 \
 	for (i = 0; i < n_slot; ++i)                                           \
 		for (cur = node_ptr[i]; cur; cur = cur->next)
@@ -81,10 +70,11 @@ static bool add_typeattribute(struct policydb *db, const char *type,
 // htable is a struct instead of pointer above 5.8.0:
 // https://elixir.bootlin.com/linux/v5.8-rc1/source/security/selinux/ss/symtab.h
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
-#define ksu_hashtab_for_each(htab, cur) ksu_hash_for_each (htab.htable, htab.size, cur)
+#define ksu_hashtab_for_each(htab, cur)                                        \
+	ksu_hash_for_each(htab.htable, htab.size, cur)
 #else
-#define ksu_hashtab_for_each(htab, cur)                                            \
-	ksu_hash_for_each (htab->htable, htab->size, cur)
+#define ksu_hashtab_for_each(htab, cur)                                        \
+	ksu_hash_for_each(htab->htable, htab->size, cur)
 #endif
 
 // symtab_search is introduced on 5.9.0:
@@ -95,8 +85,7 @@ static bool add_typeattribute(struct policydb *db, const char *type,
 #endif
 
 #define avtab_for_each(avtab, cur)                                             \
-	ksu_hash_for_each (avtab.htable, avtab.nslot, cur)                         \
-		;
+	ksu_hash_for_each(avtab.htable, avtab.nslot, cur);
 
 static struct avtab_node *get_avtab_node(struct policydb *db,
 					 struct avtab_key *key,
@@ -592,14 +581,14 @@ static bool add_filename_trans(struct policydb *db, const char *s,
 		trans = (struct filename_trans_datum *)kcalloc(sizeof(*trans),
 							       1, GFP_ATOMIC);
 		if (!trans) {
-			pr_err("add_filename_trans: Failed to alloc datum");
+			pr_err("add_filename_trans: Failed to alloc datum\n");
 			return false;
 		}
 		struct filename_trans *new_key =
 			(struct filename_trans *)kmalloc(sizeof(*new_key),
 							 GFP_ATOMIC);
 		if (!new_key) {
-			pr_err("add_filename_trans: Failed to alloc new_key");
+			pr_err("add_filename_trans: Failed to alloc new_key\n");
 			return false;
 		}
 		*new_key = key;
@@ -617,6 +606,22 @@ static bool add_genfscon(struct policydb *db, const char *fs_name,
 			 const char *path, const char *context)
 {
 	return false;
+}
+
+static void *ksu_realloc(void *old, size_t new_size, size_t old_size)
+{
+	// we can't use krealloc, because it may be read-only
+	void *new = kzalloc(new_size, GFP_ATOMIC);
+	if (!new) {
+		return NULL;
+	}
+	if (old_size) {
+		memcpy(new, old, old_size);
+	}
+	// we can't use kfree, because it may be read-only
+	// there maybe some leaks, maybe we can check ptr_write, but it's not a big deal
+	// kfree(old);
+	return new;
 }
 
 static bool add_type(struct policydb *db, const char *type_name, bool attr)
@@ -652,19 +657,20 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
-	size_t new_size = sizeof(struct ebitmap) * db->p_types.nprim;
 	struct ebitmap *new_type_attr_map_array =
-		(krealloc(db->type_attr_map_array, new_size, GFP_ATOMIC));
-
-	struct type_datum **new_type_val_to_struct =
-		krealloc(db->type_val_to_struct,
-			 sizeof(*db->type_val_to_struct) * db->p_types.nprim,
-			 GFP_ATOMIC);
+		ksu_realloc(db->type_attr_map_array,
+			    value * sizeof(struct ebitmap),
+			    (value - 1) * sizeof(struct ebitmap));
 
 	if (!new_type_attr_map_array) {
 		pr_err("add_type: alloc type_attr_map_array failed\n");
 		return false;
 	}
+
+	struct type_datum **new_type_val_to_struct =
+		ksu_realloc(db->type_val_to_struct,
+			    sizeof(*db->type_val_to_struct) * value,
+			    sizeof(*db->type_val_to_struct) * (value - 1));
 
 	if (!new_type_val_to_struct) {
 		pr_err("add_type: alloc type_val_to_struct failed\n");
@@ -672,9 +678,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 	}
 
 	char **new_val_to_name_types =
-		krealloc(db->sym_val_to_name[SYM_TYPES],
-			 sizeof(char *) * db->symtab[SYM_TYPES].nprim,
-			 GFP_KERNEL);
+		ksu_realloc(db->sym_val_to_name[SYM_TYPES],
+			    sizeof(char *) * value,
+			    sizeof(char *) * (value - 1));
 	if (!new_val_to_name_types) {
 		pr_err("add_type: alloc val_to_name failed\n");
 		return false;
@@ -693,7 +699,7 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 	int i;
 	for (i = 0; i < db->p_roles.nprim; ++i) {
 		ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1,
-				0);
+				1);
 	}
 
 	return true;
@@ -743,7 +749,7 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 	int i;
 	for (i = 0; i < db->p_roles.nprim; ++i) {
 		ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1,
-				0);
+				1);
 	}
 
 	return true;
@@ -854,7 +860,7 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 	int i;
 	for (i = 0; i < db->p_roles.nprim; ++i) {
 		ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1,
-				0);
+				1);
 	}
 	return true;
 #endif
