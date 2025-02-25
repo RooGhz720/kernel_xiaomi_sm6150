@@ -8,8 +8,6 @@
 
 #define KERNEL_SU_DOMAIN "u:r:su:s0"
 
-static u32 ksu_sid;
-
 static int transive_to_domain(const char *domain)
 {
 	struct cred *cred;
@@ -26,11 +24,11 @@ static int transive_to_domain(const char *domain)
 	}
 
 	error = security_secctx_to_secid(domain, strlen(domain), &sid);
-	pr_info("error: %d, sid: %d\n", error, sid);
+	if (error) {
+		pr_info("security_secctx_to_secid %s -> sid: %d, error: %d\n",
+			domain, sid, error);
+	}
 	if (!error) {
-		if (!ksu_sid)
-			ksu_sid = sid;
-
 		tsec->sid = sid;
 		tsec->create_sid = 0;
 		tsec->keycreate_sid = 0;
@@ -42,7 +40,7 @@ static int transive_to_domain(const char *domain)
 void setup_selinux(const char *domain)
 {
 	if (transive_to_domain(domain)) {
-		pr_err("transive domain failed.");
+		pr_err("transive domain failed.\n");
 		return;
 	}
 
@@ -103,5 +101,45 @@ static inline u32 current_sid(void)
 
 bool is_ksu_domain()
 {
-	return ksu_sid && current_sid() == ksu_sid;
+	char *domain;
+	u32 seclen;
+	bool result;
+	int err = security_secid_to_secctx(current_sid(), &domain, &seclen);
+	if (err) {
+		return false;
+	}
+	result = strncmp(KERNEL_SU_DOMAIN, domain, seclen) == 0;
+	security_release_secctx(domain, seclen);
+	return result;
+}
+
+bool is_zygote(void *sec)
+{
+	struct task_security_struct *tsec = (struct task_security_struct *)sec;
+	if (!tsec) {
+		return false;
+	}
+	char *domain;
+	u32 seclen;
+	bool result;
+	int err = security_secid_to_secctx(tsec->sid, &domain, &seclen);
+	if (err) {
+		return false;
+	}
+	result = strncmp("u:r:zygote:s0", domain, seclen) == 0;
+	security_release_secctx(domain, seclen);
+	return result;
+}
+
+#define DEVPTS_DOMAIN "u:object_r:ksu_file:s0"
+
+u32 ksu_get_devpts_sid()
+{
+	u32 devpts_sid = 0;
+	int err = security_secctx_to_secid(DEVPTS_DOMAIN, strlen(DEVPTS_DOMAIN),
+					   &devpts_sid);
+	if (err) {
+		pr_info("get devpts sid err %d\n", err);
+	}
+	return devpts_sid;
 }

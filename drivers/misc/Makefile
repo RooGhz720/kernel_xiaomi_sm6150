@@ -105,4 +105,3 @@ obj-$(CONFIG_GPIO_TESTING_MODE)     += gpio-testing-mode.o
 
 obj-$(CONFIG_FORCE_FAST_CHARGE) += fastchg.o
 obj-y += aghisna_gpu.o
-obj-y += aghisna_ksu.o
