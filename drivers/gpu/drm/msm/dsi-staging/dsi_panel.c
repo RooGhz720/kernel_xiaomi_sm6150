@@ -31,7 +31,6 @@
 #include <linux/msm_drm_notify.h>
 #include <asm/uaccess.h>
 #include <asm/fcntl.h>
-#include <misc/aghisna_panel.h>
 
 #define DSI_READ_WRITE_PANEL_DEBUG 1
 #if DSI_READ_WRITE_PANEL_DEBUG
@@ -2056,13 +2055,8 @@ static int dsi_panel_parse_phy_props(struct dsi_panel *panel)
 	struct dsi_parser_utils *utils = &panel->utils;
 	const char *name = panel->name;
 
-	if (jenis_dimensi){
-		rc = utils->read_u32(utils->data,
-			"qcom,mdss-pan-physical-width-dimension-miui", &val);
-	} else {
-		rc = utils->read_u32(utils->data,
-			"qcom,mdss-pan-physical-width-dimension", &val);
-	}
+	rc = utils->read_u32(utils->data,
+		  "qcom,mdss-pan-physical-width-dimension", &val);
 	if (rc) {
 		pr_debug("[%s] Physical panel width is not defined\n", name);
 		props->panel_width_mm = 0;
@@ -2071,15 +2065,9 @@ static int dsi_panel_parse_phy_props(struct dsi_panel *panel)
 		props->panel_width_mm = val;
 	}
 
-	if (jenis_dimensi){
-		rc = utils->read_u32(utils->data,
-					"qcom,mdss-pan-physical-height-dimension-miui",
-					&val);
-	} else {
-		rc = utils->read_u32(utils->data,
-					"qcom,mdss-pan-physical-height-dimension",
-					&val);
-	}
+	rc = utils->read_u32(utils->data,
+				  "qcom,mdss-pan-physical-height-dimension",
+				  &val);
 	if (rc) {
 		pr_debug("[%s] Physical panel height is not defined\n", name);
 		props->panel_height_mm = 0;
