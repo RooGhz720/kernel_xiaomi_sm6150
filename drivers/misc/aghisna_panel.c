@@ -20,26 +20,6 @@
 #include <linux/kernel.h>
 #include <misc/aghisna_panel.h>
 
-/* dfps */
-bool __read_mostly dfps_mod = false;
-module_param(dfps_mod, bool, 0644);
-
-static int __init read_dfps(char *s)
-{
-    int status;
-	if (s)
-		status = simple_strtoul(s, NULL, 0);
-
-	if ( status > 0 ) {
-		dfps_mod = true;
-	} else {
-		dfps_mod = false;
-	}
-	return 1;
-}
-__setup("aghisna.fps=", read_dfps);
-
-/* dimension */
 bool __read_mostly jenis_dimensi = false;
 module_param(jenis_dimensi, bool, 0644);
 

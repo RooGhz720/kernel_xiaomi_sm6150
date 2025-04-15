@@ -11,19 +11,6 @@
 #include "ksu.h"
 #include "throne_tracker.h"
 
-unsigned int enable_kernelsu = 1;
-static int __init read_kernelsu_state(char *s)
-{
-	if (s)
-		enable_kernelsu = simple_strtoul(s, NULL, 0);
-	return 1;
-}
-__setup("aghisna.su=", read_kernelsu_state);
-unsigned int get_ksu_state(void)
-{
-	return enable_kernelsu;
-}
-
 static struct workqueue_struct *ksu_workqueue;
 
 bool ksu_queue_work(struct work_struct *work)
@@ -52,12 +39,6 @@ extern void ksu_ksud_exit();
 
 int __init kernelsu_init(void)
 {
-
-	if (enable_kernelsu < 1) {
-	pr_info_once("KernelSu Disable");
-		return 0;
-	}
-
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert("*************************************************************");
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
@@ -93,10 +74,6 @@ int __init kernelsu_init(void)
 
 void kernelsu_exit(void)
 {
-
-	if (enable_kernelsu < 1)
-		return;
-
 	ksu_allowlist_exit();
 
 	ksu_throne_tracker_exit();

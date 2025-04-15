@@ -13,7 +13,7 @@ config KSU_WITH_KPROBES
 	bool "Use kprobes for kernelsu"
 	depends on KSU
 	depends on KPROBES
-	default y
+	default n
 	help
 	  Disable if you use manual hooks.
 

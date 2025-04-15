@@ -1809,20 +1809,10 @@ static int dsi_panel_parse_dfps_caps(struct dsi_panel *panel)
 		goto error;
 	}
 
-/* aghisna addon */
-	if (dfps_mod){
-	rc = utils->read_u32_array(utils->data,
-			"qcom,dsi-supported-dfps-list-mod",
-			dfps_caps->dfps_list,
-			dfps_caps->dfps_list_len);
-	} else {
 	rc = utils->read_u32_array(utils->data,
 			"qcom,dsi-supported-dfps-list",
 			dfps_caps->dfps_list,
 			dfps_caps->dfps_list_len);
-	}
-			
-			
 	if (rc) {
 		pr_err("[%s] dfps refresh rate list parse failed\n", name);
 		rc = -EINVAL;

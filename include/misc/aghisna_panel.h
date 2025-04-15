@@ -16,4 +16,3 @@
  */
 
 extern bool jenis_dimensi;
-extern bool dfps_mod;
