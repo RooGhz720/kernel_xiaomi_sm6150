@@ -2,6 +2,7 @@ obj-y += selinux.o
 obj-y += sepolicy.o
 obj-y += rules.o
 
+# SELinux 驱动程序检查
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
 ccflags-y += -DKSU_COMPAT_HAS_CURRENT_SID
 endif

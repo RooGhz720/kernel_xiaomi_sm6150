@@ -429,21 +429,9 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 }
 EXPORT_SYMBOL(kernel_read);
 
-// KernelSU hook
-#ifdef CONFIG_KSU
-extern bool ksu_vfs_read_hook __read_mostly;
-extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
-			size_t *count_ptr, loff_t **pos);
-#endif
-
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
-
-#ifdef CONFIG_KSU
-        if (unlikely(ksu_vfs_read_hook))
-		ksu_handle_vfs_read(&file, &buf, &count, &pos); // call KSU fork first
-#endif
 		
 	if (!(file->f_mode & FMODE_READ))
 		return -EBADF;
@@ -580,6 +568,13 @@ static inline void file_pos_write(struct file *file, loff_t pos)
 		file->f_pos = pos;
 }
 
+/* SukiSu hook */
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_HOOK_KPROBES)
+extern bool ksu_vfs_read_hook __read_mostly;
+extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
+			size_t *count_ptr);
+#endif
+
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	struct fd f = fdget_pos(fd);
@@ -587,6 +582,10 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 
 	if (f.file) {
 		loff_t pos = file_pos_read(f.file);
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_HOOK_KPROBES)
+	if (unlikely(ksu_vfs_read_hook)) 
+		ksu_handle_sys_read(fd, &buf, &count);
+#endif
 		ret = vfs_read(f.file, buf, count, &pos);
 		if (ret >= 0)
 			file_pos_write(f.file, pos);

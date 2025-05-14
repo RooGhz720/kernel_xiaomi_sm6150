@@ -354,10 +354,10 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
 	return error;
 }
 
-// KernelSU hook
-#ifdef CONFIG_KSU
+/* KernelSu HOOK */
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_HOOK_KPROBES)
 extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
-			        int *flags);
+			                    int *flags);
 #endif
 
 /*
@@ -375,8 +375,8 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 	int res;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 
-#ifdef CONFIG_KSU
-	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);  // call KSU hook first
+#if defined(CONFIG_KSU) && !defined(KSU_HOOK_WITH_KPROBES)
+	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 #endif
 	
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
